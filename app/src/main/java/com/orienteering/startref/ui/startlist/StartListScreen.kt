@@ -1,0 +1,220 @@
+package com.orienteering.startref.ui.startlist
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.GpsNotFixed
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.orienteering.startref.ui.edituser.EditUserDialog
+import com.orienteering.startref.ui.startlist.components.RunnerRow
+import com.orienteering.startref.ui.startlist.components.TimeDivider
+import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+private val clockFormatter = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault())
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun StartListScreen(
+    onNavigateToSettings: () -> Unit,
+    viewModel: StartListViewModel = hiltViewModel()
+) {
+    val items by viewModel.startListItems.collectAsStateWithLifecycle()
+    val currentTimeMs by viewModel.currentTimeMs.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val selectedRunner by viewModel.selectedRunner.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    val availableClasses by viewModel.availableClasses.collectAsStateWithLifecycle()
+    val autoScrollEnabled by viewModel.autoScrollEnabled.collectAsStateWithLifecycle()
+    val syncCounts by viewModel.syncCounts.collectAsStateWithLifecycle()
+
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(message) {
+        message?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMessage()
+        }
+    }
+
+    // Auto-scroll: fire every time the minute changes
+    val currentMinute = currentTimeMs / 60_000
+    LaunchedEffect(currentMinute) {
+        if (autoScrollEnabled && items.isNotEmpty()) {
+            val idx = viewModel.currentHeaderIndex()
+            if (idx >= 0) listState.animateScrollToItem(idx)
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    // Sync counter with white circle background
+                    val (sent, total) = syncCounts
+                    Box(
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .size(40.dp)
+                            .background(Color.White, shape = CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "$sent/$total",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (sent < total) Color(0xFFE65100) else Color(0xFF2E7D32),
+                            maxLines = 1
+                        )
+                    }
+                },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            clockFormatter.format(Instant.ofEpochMilli(currentTimeMs)),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(settings.headerText, style = MaterialTheme.typography.titleMedium)
+                    }
+                },
+                actions = {
+                    // Auto-scroll toggle
+                    IconButton(onClick = { viewModel.toggleAutoScroll() }) {
+                        Icon(
+                            imageVector = if (autoScrollEnabled) Icons.Default.GpsFixed else Icons.Default.GpsNotFixed,
+                            contentDescription = if (autoScrollEnabled) "Auto-scroll ON" else "Auto-scroll OFF",
+                            tint = if (autoScrollEnabled) Color(0xFF76FF03) else MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+
+                    // Manual scroll to NOW
+                    TextButton(onClick = {
+                        scope.launch {
+                            val idx = viewModel.currentHeaderIndex()
+                            if (idx >= 0) listState.animateScrollToItem(idx)
+                        }
+                    }) {
+                        Text(
+                            "Scroll\nto NOW",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        },
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                Snackbar(modifier = Modifier.padding(8.dp)) { Text(data.visuals.message) }
+            }
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            if (items.isEmpty() && !isLoading) {
+                Text(
+                    "No start list loaded. Go to Settings → Reload startlist.",
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(32.dp),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(
+                        items = items,
+                        key = { item ->
+                            when (item) {
+                                is StartListItem.Header -> "h_${item.timeMinute}"
+                                is StartListItem.Row -> "r_${item.runner.startNumber}"
+                            }
+                        }
+                    ) { item ->
+                        when (item) {
+                            is StartListItem.Header -> TimeDivider(item.timeMinute, item.isCurrent, settings.rowFontSize.sp)
+                            is StartListItem.Row -> RunnerRow(
+                                runner = item.runner,
+                                onCheckIn = { viewModel.toggleCheckIn(item.runner.startNumber) },
+                                onDns = { viewModel.toggleDns(item.runner.startNumber) },
+                                onEdit = { viewModel.selectRunner(item.runner) },
+                                fontSize = settings.rowFontSize.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            }
+        }
+    }
+
+    selectedRunner?.let { runner ->
+        EditUserDialog(
+            runner = runner,
+            availableClasses = availableClasses,
+            currentTimeMs = currentTimeMs,
+            onDismiss = { viewModel.selectRunner(null) },
+            onSave = { updated -> viewModel.updateRunner(updated) }
+        )
+    }
+}

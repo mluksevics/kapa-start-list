@@ -1,0 +1,5 @@
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-keep class * extends androidx.room.RoomDatabase
+-keep @androidx.room.Entity class *
+-keepattributes *Annotation*
