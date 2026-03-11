@@ -80,14 +80,14 @@ All fields are editable via an Edit dialog:
 
 ## Screenshots
 
-### Filter by Total Spend
-![Filter by total spend](docs/screenshots/filter-total-spend.png)
+### Start List
+![Start list](docs/screenshots/start-list.png)
 
-### Filter by Purchased Store POS IDs
-![Filter by purchased store POS IDs](docs/screenshots/filter-pos-ids.png)
+### Edit Runner (class dropdown)
+![Edit runner dialog](docs/screenshots/edit-runner.png)
 
-### Date Range Dropdown
-![Date range dropdown](docs/screenshots/filter-date-range-dropdown.png)
+### Settings
+![Settings screen](docs/screenshots/settings.png)
 
 ## Stack
 
