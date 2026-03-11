@@ -78,6 +78,17 @@ All fields are editable via an Edit dialog:
 - Exports the full current local state to a `.csv` file in the device Downloads folder
 - All fields included: start number, class, SI card, name, club, start time, checked-in status, DNS status
 
+## Screenshots
+
+### Filter by Total Spend
+![Filter by total spend](docs/screenshots/filter-total-spend.png)
+
+### Filter by Purchased Store POS IDs
+![Filter by purchased store POS IDs](docs/screenshots/filter-pos-ids.png)
+
+### Date Range Dropdown
+![Date range dropdown](docs/screenshots/filter-date-range-dropdown.png)
+
 ## Stack
 
 - Kotlin + Jetpack Compose + Material 3
