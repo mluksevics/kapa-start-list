@@ -18,12 +18,15 @@ data class RunnerDto(
     val siChipNo: String?,
     val name: String,
     val surname: String,
+    val classId: Int,
     val className: String,
+    val clubId: Int,
     val clubName: String,
     val country: String?,
     val statusId: Int,
     val statusName: String,
     val startPlace: Int,
+    val startTime: String?,
     val lastModifiedUtc: Long,
     val lastModifiedBy: String
 )
@@ -31,6 +34,11 @@ data class RunnerDto(
 data class GetRunnersResult(
     val serverTimeUtc: Long,
     val runners: List<RunnerDto>
+)
+
+data class LookupItemDto(
+    val id: Int,
+    val name: String
 )
 
 class ApiClient(
@@ -49,9 +57,11 @@ class ApiClient(
         siCard: String?,
         name: String?,
         surname: String?,
-        clubName: String?,
+        classId: Int?,
+        clubId: Int?,
         country: String?,
         startPlace: Int?,
+        startTime: String?,
         lastModifiedAtMs: Long,
         source: String,
         settings: AppSettings
@@ -66,9 +76,11 @@ class ApiClient(
                 siCard?.let { put("siChipNo", it) }
                 name?.let { put("name", it) }
                 surname?.let { put("surname", it) }
-                clubName?.let { put("clubName", it) }
+                classId?.let { put("classId", it) }
+                clubId?.let { put("clubId", it) }
                 country?.let { put("country", it) }
                 startPlace?.let { put("startPlace", it) }
+                startTime?.let { put("startTime", it) }
                 put("lastModifiedUtc", toIso(lastModifiedAtMs))
                 put("source", source)
             }.toString()
@@ -113,12 +125,15 @@ class ApiClient(
                         siChipNo = r.optString("siChipNo").takeIf { it.isNotEmpty() },
                         name = r.getString("name"),
                         surname = r.getString("surname"),
+                        classId = r.optInt("classId", 0),
                         className = r.getString("className"),
+                        clubId = r.optInt("clubId", 0),
                         clubName = r.getString("clubName"),
                         country = r.optString("country").takeIf { it.isNotEmpty() },
                         statusId = r.getInt("statusId"),
                         statusName = r.getString("statusName"),
                         startPlace = r.getInt("startPlace"),
+                        startTime = r.optString("startTime").takeIf { it.isNotEmpty() },
                         lastModifiedUtc = parseIso(r.getString("lastModifiedUtc")),
                         lastModifiedBy = r.getString("lastModifiedBy")
                     )
@@ -127,6 +142,66 @@ class ApiClient(
             }
         } catch (_: Exception) {
             null
+        }
+    }
+
+    suspend fun getClasses(settings: AppSettings): List<LookupItemDto> = withContext(Dispatchers.IO) {
+        val baseUrl = settings.apiBaseUrl.trimEnd('/')
+        val apiKey = settings.apiKey
+        if (baseUrl.isBlank() || apiKey.isBlank()) return@withContext emptyList()
+
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/api/lookups/classes")
+                .addHeader("X-Api-Key", apiKey)
+                .get()
+                .build()
+
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext emptyList()
+                val array = JSONArray(response.body!!.string())
+                (0 until array.length())
+                    .map { i -> array.getJSONObject(i) }
+                    .map { item ->
+                        LookupItemDto(
+                            id = item.optInt("id", 0),
+                            name = item.optString("name")
+                        )
+                    }
+                    .filter { it.id > 0 && it.name.isNotBlank() }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun getClubs(settings: AppSettings): List<LookupItemDto> = withContext(Dispatchers.IO) {
+        val baseUrl = settings.apiBaseUrl.trimEnd('/')
+        val apiKey = settings.apiKey
+        if (baseUrl.isBlank() || apiKey.isBlank()) return@withContext emptyList()
+
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/api/lookups/clubs")
+                .addHeader("X-Api-Key", apiKey)
+                .get()
+                .build()
+
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext emptyList()
+                val array = JSONArray(response.body!!.string())
+                (0 until array.length())
+                    .map { i -> array.getJSONObject(i) }
+                    .map { item ->
+                        LookupItemDto(
+                            id = item.optInt("id", 0),
+                            name = item.optString("name")
+                        )
+                    }
+                    .filter { it.id > 0 && it.name.isNotBlank() }
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

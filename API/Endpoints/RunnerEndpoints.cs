@@ -32,6 +32,10 @@ public static class RunnerEndpoints
 
             var serverTimeUtc = DateTimeOffset.UtcNow;
 
+            // Load lookup dicts for name resolution
+            var classNames = await db.Classes.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name);
+            var clubNames  = await db.Clubs.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name);
+
             var query = db.Runners
                 .AsNoTracking()
                 .Include(r => r.Status)
@@ -40,23 +44,25 @@ public static class RunnerEndpoints
             if (changedSince.HasValue)
                 query = query.Where(r => r.LastModifiedUtc > changedSince.Value);
 
-            var runners = await query
-                .OrderBy(r => r.StartNumber)
+            var runners = (await query.OrderBy(r => r.StartNumber).ToListAsync())
                 .Select(r => new RunnerResponse(
                     r.CompetitionDate,
                     r.StartNumber,
                     r.SiChipNo,
                     r.Name,
                     r.Surname,
-                    r.ClassName,
-                    r.ClubName,
+                    r.ClassId,
+                    classNames.GetValueOrDefault(r.ClassId, ""),
+                    r.ClubId,
+                    clubNames.GetValueOrDefault(r.ClubId, ""),
                     r.Country,
                     r.StatusId,
                     r.Status.Name,
                     r.StartPlace,
+                    r.StartTime?.ToString("HH:mm:ss"),
                     r.LastModifiedUtc,
                     r.LastModifiedBy))
-                .ToListAsync();
+                .ToList();
 
             return Results.Ok(new GetRunnersResponse(serverTimeUtc, runners));
         });
@@ -89,6 +95,35 @@ public static class RunnerEndpoints
                 competitionCreated = true;
             }
 
+            // Upsert Classes and Clubs from incoming data
+            var incomingClasses = request.Runners
+                .Where(r => r.ClassId > 0 && !string.IsNullOrEmpty(r.ClassName))
+                .GroupBy(r => r.ClassId)
+                .Select(g => new Class { Id = g.Key, Name = g.First().ClassName });
+
+            foreach (var cls in incomingClasses)
+            {
+                var existing = await db.Classes.FindAsync(cls.Id);
+                if (existing is null)
+                    db.Classes.Add(cls);
+                else if (existing.Name != cls.Name)
+                    existing.Name = cls.Name;
+            }
+
+            var incomingClubs = request.Runners
+                .Where(r => r.ClubId > 0 && !string.IsNullOrEmpty(r.ClubName))
+                .GroupBy(r => r.ClubId)
+                .Select(g => new Club { Id = g.Key, Name = g.First().ClubName });
+
+            foreach (var club in incomingClubs)
+            {
+                var existing = await db.Clubs.FindAsync(club.Id);
+                if (existing is null)
+                    db.Clubs.Add(club);
+                else if (existing.Name != club.Name)
+                    existing.Name = club.Name;
+            }
+
             // Load all existing runners for this date in one query
             var existingRunners = await db.Runners
                 .Where(r => r.CompetitionDate == competitionDate)
@@ -99,6 +134,8 @@ public static class RunnerEndpoints
 
             foreach (var dto in request.Runners)
             {
+                TimeOnly? startTime = TimeOnly.TryParse(dto.StartTime, out var st) ? st : null;
+
                 if (existingRunners.TryGetValue(dto.StartNumber, out var existing))
                 {
                     bool anyChange = false;
@@ -127,10 +164,16 @@ public static class RunnerEndpoints
                             existing.Surname = dto.Surname;
                             anyChange = true;
                         }
-                        if (existing.ClubName != dto.ClubName)
+                        if (existing.ClassId != dto.ClassId)
                         {
-                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClubName", existing.ClubName, dto.ClubName, utcNow, request.Source));
-                            existing.ClubName = dto.ClubName;
+                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClassId", existing.ClassId.ToString(), dto.ClassId.ToString(), utcNow, request.Source));
+                            existing.ClassId = dto.ClassId;
+                            anyChange = true;
+                        }
+                        if (existing.ClubId != dto.ClubId)
+                        {
+                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClubId", existing.ClubId.ToString(), dto.ClubId.ToString(), utcNow, request.Source));
+                            existing.ClubId = dto.ClubId;
                             anyChange = true;
                         }
                         if (existing.Country != dto.Country)
@@ -145,7 +188,12 @@ public static class RunnerEndpoints
                             existing.StartPlace = dto.StartPlace;
                             anyChange = true;
                         }
-                        // ClassName is immutable after initial INSERT — never updated
+                        if (startTime.HasValue && existing.StartTime != startTime)
+                        {
+                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StartTime", existing.StartTime?.ToString("HH:mm:ss"), dto.StartTime, utcNow, request.Source));
+                            existing.StartTime = startTime;
+                            anyChange = true;
+                        }
                     }
                     else
                     {
@@ -179,7 +227,7 @@ public static class RunnerEndpoints
                 }
                 else
                 {
-                    // New runner — INSERT and log all fields
+                    // New runner — INSERT
                     var runner = new Runner
                     {
                         CompetitionDate = competitionDate,
@@ -187,11 +235,12 @@ public static class RunnerEndpoints
                         SiChipNo = dto.SiChipNo,
                         Name = dto.Name,
                         Surname = dto.Surname,
-                        ClassName = dto.ClassName,
-                        ClubName = dto.ClubName,
+                        ClassId = dto.ClassId,
+                        ClubId = dto.ClubId,
                         Country = dto.Country,
                         StatusId = dto.StatusId,
                         StartPlace = dto.StartPlace,
+                        StartTime = startTime,
                         LastModifiedUtc = utcNow,
                         LastModifiedBy = request.Source
                     };
@@ -199,8 +248,8 @@ public static class RunnerEndpoints
 
                     changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Name", null, dto.Name, utcNow, request.Source));
                     changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Surname", null, dto.Surname, utcNow, request.Source));
-                    changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClassName", null, dto.ClassName, utcNow, request.Source));
-                    changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClubName", null, dto.ClubName, utcNow, request.Source));
+                    changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClassId", null, dto.ClassId.ToString(), utcNow, request.Source));
+                    changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClubId", null, dto.ClubId.ToString(), utcNow, request.Source));
                     if (dto.SiChipNo is not null)
                         changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "SiChipNo", null, dto.SiChipNo, utcNow, request.Source));
                     if (dto.Country is not null)
@@ -209,6 +258,8 @@ public static class RunnerEndpoints
                         changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StatusId", "1", dto.StatusId.ToString(), utcNow, request.Source));
                     if (dto.StartPlace != 0)
                         changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StartPlace", "0", dto.StartPlace.ToString(), utcNow, request.Source));
+                    if (startTime.HasValue)
+                        changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StartTime", null, dto.StartTime, utcNow, request.Source));
 
                     inserted++;
                 }
@@ -288,10 +339,17 @@ public static class RunnerEndpoints
                 anyChange = true;
             }
 
-            if (request.ClubName is not null && request.ClubName != runner.ClubName)
+            if (request.ClassId.HasValue && request.ClassId.Value != runner.ClassId)
             {
-                changeLogEntries.Add(MakeLog(competitionDate, startNumber, "ClubName", runner.ClubName, request.ClubName, utcNow, request.Source));
-                runner.ClubName = request.ClubName;
+                changeLogEntries.Add(MakeLog(competitionDate, startNumber, "ClassId", runner.ClassId.ToString(), request.ClassId.Value.ToString(), utcNow, request.Source));
+                runner.ClassId = request.ClassId.Value;
+                anyChange = true;
+            }
+
+            if (request.ClubId.HasValue && request.ClubId.Value != runner.ClubId)
+            {
+                changeLogEntries.Add(MakeLog(competitionDate, startNumber, "ClubId", runner.ClubId.ToString(), request.ClubId.Value.ToString(), utcNow, request.Source));
+                runner.ClubId = request.ClubId.Value;
                 anyChange = true;
             }
 
@@ -309,7 +367,14 @@ public static class RunnerEndpoints
                 anyChange = true;
             }
 
-            // ClassName is intentionally not patched — it's immutable after initial upload
+            if (request.StartTime is not null &&
+                TimeOnly.TryParse(request.StartTime, out var newStartTime) &&
+                runner.StartTime != newStartTime)
+            {
+                changeLogEntries.Add(MakeLog(competitionDate, startNumber, "StartTime", runner.StartTime?.ToString("HH:mm:ss"), request.StartTime, utcNow, request.Source));
+                runner.StartTime = newStartTime;
+                anyChange = true;
+            }
 
             if (anyChange)
             {

@@ -15,7 +15,7 @@ partial class DbBridgeExplorerForm
     {
         components = new System.ComponentModel.Container();
         Text = "DbBridge Explorer";
-        Size = new System.Drawing.Size(870, 830);
+        Size = new System.Drawing.Size(870, 900);
         MinimumSize = new System.Drawing.Size(800, 700);
         StartPosition = FormStartPosition.CenterParent;
         Font = new System.Drawing.Font("Segoe UI", 9f);
@@ -80,6 +80,10 @@ partial class DbBridgeExplorerForm
         _txtNewChip = AddTextBox(362, y, 80);
         AddLabel("New KatNr:", 490, y, 68);
         _txtNewKat = AddTextBox(562, y, 70);
+        y += rowH;
+
+        AddLabel("New Name:", 10, y, 78);
+        _txtNewName = AddTextBox(92, y, 300);
         y += rowH + 5;
 
         // ── Read ──────────────────────────────────────────────────────────────
@@ -120,6 +124,13 @@ partial class DbBridgeExplorerForm
         AddButton("Change KatNr by IdNr", 10, y, 180, BtnChangeKatById_Click);
         AddButton("Change KatNr by StartNr", 200, y, 195, BtnChangeKatByStartNr_Click);
         AddButton("Change KatNr by ChipNr", 405, y, 195, BtnChangeKatByChipNr_Click);
+        y += rowH + 5;
+
+        // ── Write: Name ───────────────────────────────────────────────────────
+        AddSep(y); y += 8;
+        AddSectionLabel("Write: Name  (uses IdNr + New Name inputs above)", 10, y); y += 24;
+
+        AddButton("Update Name by IdNr", 10, y, 190, BtnUpdateName_Click);
         y += rowH + 5;
 
         // ── Test Mode ─────────────────────────────────────────────────────────

@@ -33,9 +33,11 @@ fun RunnerRow(
     onEdit: () -> Unit,
     fontSize: TextUnit = 16.sp
 ) {
+    val isDns = runner.statusId == 3
+    val isCheckedIn = runner.statusId == 2
     val bg = when {
-        runner.dns -> DnsRed
-        runner.checkedIn -> CheckedInGreen
+        isDns -> DnsRed
+        isCheckedIn -> CheckedInGreen
         else -> Color.White
     }
 
@@ -56,7 +58,7 @@ fun RunnerRow(
             contentAlignment = Alignment.Center
         ) {
             Checkbox(
-                checked = runner.checkedIn,
+                checked = isCheckedIn,
                 onCheckedChange = null
             )
         }

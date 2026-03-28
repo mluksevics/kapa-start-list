@@ -192,7 +192,7 @@ fun StartListScreen(
                             is StartListItem.Header -> TimeDivider(item.timeMinute, item.isCurrent, settings.rowFontSize.sp)
                             is StartListItem.Row -> RunnerRow(
                                 runner = item.runner,
-                                onCheckIn = { viewModel.toggleCheckIn(item.runner.startNumber) },
+                                onCheckIn = { viewModel.markStarted(item.runner.startNumber) },
                                 onDns = { viewModel.toggleDns(item.runner.startNumber) },
                                 onEdit = { viewModel.selectRunner(item.runner) },
                                 fontSize = settings.rowFontSize.sp

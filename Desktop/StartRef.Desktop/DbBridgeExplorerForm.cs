@@ -19,7 +19,7 @@ public partial class DbBridgeExplorerForm : Form
     private TextBox _txtIdNr = null!, _txtStartNr = null!, _txtChipSearch = null!;
 
     // Common value inputs
-    private TextBox _txtTime = null!, _txtNewChip = null!, _txtNewKat = null!;
+    private TextBox _txtTime = null!, _txtNewChip = null!, _txtNewKat = null!, _txtNewName = null!;
 
     // Output
     private TextBox _txtLog = null!;
@@ -256,6 +256,14 @@ public partial class DbBridgeExplorerForm : Form
     {
         if (!EnsureOpen()) return;
         LogResult("ChangeKatNrByChipNr", _db!.ChangeKatNrByChipNr(Day, ParseInt(_txtNewKat.Text), ParseInt(_txtChipSearch.Text)));
+    }
+
+    // ── Write: Name ──────────────────────────────────────────────────────────
+
+    private void BtnUpdateName_Click(object sender, EventArgs e)
+    {
+        if (!EnsureOpen()) return;
+        LogResult("UpdateName(Teiln)", _db!.UpdateName("Teiln", ParseInt(_txtIdNr.Text), _txtNewName.Text.Trim()));
     }
 
     // ── Test mode ────────────────────────────────────────────────────────────

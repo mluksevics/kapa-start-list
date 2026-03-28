@@ -6,14 +6,6 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-val copySampleAsset = tasks.register<Copy>("copySampleAsset") {
-    from(rootProject.rootDir) {
-        include("startlis.xml")
-    }
-    into("src/main/assets")
-}
-tasks.named("preBuild") { dependsOn(copySampleAsset) }
-
 android {
     namespace = "com.orienteering.startref"
     compileSdk = 35

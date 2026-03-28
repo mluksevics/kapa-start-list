@@ -92,4 +92,10 @@ internal static class DbBridgeNative
 
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
     public static extern int DbChangeKatNrByChipNr(IntPtr ctxHandle, int dayNo, int newKatNr, int chipNr);
+
+    // ── Update Name ───────────────────────────────────────────────────────────
+
+    /// <summary>Updates the Name field of a record in the given table by IdNr (e.g. tableName="Teiln").</summary>
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+    public static extern int DbUpdateName(IntPtr ctxHandle, string tableName, int idNr, string newName);
 }

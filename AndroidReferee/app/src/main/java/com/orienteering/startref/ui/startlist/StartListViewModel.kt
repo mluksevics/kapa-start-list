@@ -12,11 +12,13 @@ import androidx.lifecycle.viewModelScope
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.orienteering.startref.data.local.ClassEntry
 import com.orienteering.startref.data.local.entity.RunnerEntity
 import com.orienteering.startref.data.repository.StartListRepository
 import com.orienteering.startref.data.settings.AppSettings
 import com.orienteering.startref.data.settings.SettingsDataStore
 import com.orienteering.startref.data.sync.PendingSyncWorker
+import com.orienteering.startref.data.sync.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -38,6 +41,7 @@ sealed interface StartListItem {
 class StartListViewModel @Inject constructor(
     private val repository: StartListRepository,
     private val settingsDataStore: SettingsDataStore,
+    private val syncManager: SyncManager,
     private val workManager: WorkManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -60,7 +64,7 @@ class StartListViewModel @Inject constructor(
     val settings: StateFlow<AppSettings> = settingsDataStore.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings.DEFAULT)
 
-    val availableClasses: StateFlow<List<String>> = repository.observeClasses()
+    val availableClasses: StateFlow<List<ClassEntry>> = repository.observeClasses()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val syncCounts: StateFlow<Pair<Int, Int>> = repository.observeSyncCounts()
@@ -94,6 +98,14 @@ class StartListViewModel @Inject constructor(
                 delay(1000 - (now % 1000))
             }
         }
+
+        viewModelScope.launch {
+            syncManager.syncDeltas.collect { delta ->
+                if (delta.classNamesChanged > 0 || delta.clubNamesChanged > 0) {
+                    _message.value = "Changes synced: classes ${delta.classNamesChanged}, clubs ${delta.clubNamesChanged}"
+                }
+            }
+        }
     }
 
     fun toggleAutoScroll() { _autoScrollEnabled.value = !_autoScrollEnabled.value }
@@ -119,7 +131,7 @@ class StartListViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                repository.reloadFromXml(settings.value.xmlUrl)
+                repository.reloadFromApi()
                 _message.value = "Start list loaded"
             } catch (e: Exception) {
                 _message.value = "Load failed: ${e.message}"

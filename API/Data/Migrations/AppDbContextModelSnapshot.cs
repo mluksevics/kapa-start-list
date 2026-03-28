@@ -56,7 +56,9 @@ namespace StartRef.Api.Data.Migrations
                 {
                     b.Property<DateOnly>("CompetitionDate").HasColumnType("date");
                     b.Property<int>("StartNumber").HasColumnType("int");
+                    b.Property<int>("ClassId").HasColumnType("int").HasDefaultValue(0);
                     b.Property<string>("ClassName").IsRequired().HasColumnType("nvarchar(max)");
+                    b.Property<int>("ClubId").HasColumnType("int").HasDefaultValue(0);
                     b.Property<string>("ClubName").IsRequired().HasColumnType("nvarchar(max)");
                     b.Property<string>("Country").HasColumnType("nvarchar(max)");
                     b.Property<DateTimeOffset>("LastModifiedUtc").HasColumnType("datetimeoffset");

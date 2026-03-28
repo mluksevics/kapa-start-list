@@ -3,7 +3,6 @@ package com.orienteering.startref.data.settings
 import java.time.LocalDate
 
 data class AppSettings(
-    val xmlUrl: String,
     val apiBaseUrl: String,
     val apiKey: String,
     val headerText: String,
@@ -19,7 +18,6 @@ data class AppSettings(
     companion object {
         const val DEFAULT_FONT_SIZE = 16f
         val DEFAULT = AppSettings(
-            xmlUrl = "http://live.kapa.lv/startlis.XML",
             apiBaseUrl = "",
             apiKey = "",
             headerText = "Orienteering Start",

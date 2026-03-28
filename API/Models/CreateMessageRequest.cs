@@ -7,9 +7,11 @@ public sealed record PatchRunnerRequest(
     string? SiChipNo,
     string? Name,
     string? Surname,
-    string? ClubName,
+    int? ClassId,
+    int? ClubId,
     string? Country,
     int? StartPlace,
+    string? StartTime,
     DateTimeOffset LastModifiedUtc,
     string Source
 );

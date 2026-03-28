@@ -9,6 +9,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Competition> Competitions => Set<Competition>();
     public DbSet<Runner> Runners => Set<Runner>();
     public DbSet<ChangeLogEntry> ChangeLogEntries => Set<ChangeLogEntry>();
+    public DbSet<Class> Classes => Set<Class>();
+    public DbSet<Club> Clubs => Set<Club>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -57,6 +59,22 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.Id).UseIdentityColumn();
             entity.HasIndex(x => new { x.CompetitionDate, x.StartNumber });
             entity.HasIndex(x => x.ChangedAtUtc);
+        });
+
+        modelBuilder.Entity<Class>(entity =>
+        {
+            entity.ToTable("Classes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.Property(x => x.Name).IsRequired().HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<Club>(entity =>
+        {
+            entity.ToTable("Clubs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.Property(x => x.Name).IsRequired().HasMaxLength(200);
         });
     }
 }

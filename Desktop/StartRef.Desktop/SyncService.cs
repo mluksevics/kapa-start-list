@@ -34,6 +34,9 @@ public class SyncService
 
     public void Start()
     {
+        _timer?.Stop();
+        _timer?.Dispose();
+
         var settings = _getSettings();
         _timer = new System.Windows.Forms.Timer
         {
@@ -105,28 +108,253 @@ public class SyncService
             }
         }
 
-        // 3. DNS write — not yet supported by DLL
+        // 3. Write KatNr changes to DBISAM (runners modified by field devices, not desktop)
+        var katUpdates = pullResult.Runners
+            .Where(r => r.ClassId > 0 &&
+                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (katUpdates.Count > 0 && !string.IsNullOrEmpty(settings.DbIsamPath))
+        {
+            using var db = new DbBridgeService(_log);
+            if (db.Open(settings.DbIsamPath))
+            {
+                foreach (var r in katUpdates)
+                {
+                    var res = db.ChangeKatNrByStartNr(r.ClassId, r.StartNumber);
+                    if (!res.Success)
+                        _log($"{Ts()} DBISAM KatNr #{r.StartNumber} → {r.ClassId}: ERROR {res.Message}");
+                }
+            }
+            else
+            {
+                _log($"{Ts()} DBISAM not available — KatNr writes skipped. Check DB path and DbBridge.dll.");
+            }
+        }
+
+        // 4. Write StartTime changes to DBISAM (runners modified by field devices, not desktop)
+        var startTimeUpdates = pullResult.Runners
+            .Where(r => r.StartTime != null &&
+                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (startTimeUpdates.Count > 0 && !string.IsNullOrEmpty(settings.DbIsamPath))
+        {
+            using var db = new DbBridgeService(_log);
+            if (db.Open(settings.DbIsamPath))
+            {
+                foreach (var r in startTimeUpdates)
+                {
+                    var res = db.ChangeStartTimeByStartNr(settings.DayNo, r.StartTime!, r.StartNumber);
+                    if (!res.Success)
+                        _log($"{Ts()} DBISAM StartTime #{r.StartNumber} → {r.StartTime}: ERROR {res.Message}");
+                }
+            }
+            else
+            {
+                _log($"{Ts()} DBISAM not available — StartTime writes skipped. Check DB path and DbBridge.dll.");
+            }
+        }
+
+        // 5. DNS write — not yet supported by DLL
         int dnsCount = pullResult.Runners.Count(r => r.StatusId == 3);
         if (dnsCount > 0)
             _log($"{Ts()} [WARN] {dnsCount} DNS runner(s) NOT written to DBISAM — DLL lacks DbChangeDnsByStartNr.");
 
-        // 4. Bulk read/push — not yet supported by DLL
+        // 6. Bulk push
         if (forcePush)
-            _log($"{Ts()} [WARN] Force Push skipped — DLL lacks DbReadAllTeiln (bulk read). Ask Delphi developer.");
+        {
+            _log($"{Ts()} Force Push: scanning DBISAM 1–4000 (workaround — ask Delphi dev for DbReadAllTeiln).");
+
+            var runners = ScanRunnersByStartNr(settings);
+            if (runners.Count == 0)
+            {
+                _log($"{Ts()} Force Push: no runners found in scan — check DB path.");
+            }
+            else
+            {
+                var request = new BulkUploadRequest
+                {
+                    Source = settings.DeviceName,
+                    LastModifiedUtc = DateTimeOffset.UtcNow,
+                    Runners = runners
+                };
+                var pushResult = await _api.BulkUploadAsync(today, request);
+                if (pushResult is null)
+                    _log($"{Ts()} Force Push: upload failed — API unreachable.");
+                else
+                    _log($"{Ts()} Force Push: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged}");
+            }
+        }
         else if (pullResult.Runners.Count == 0)
             _log($"{Ts()} Sync: no changes from API.");
         else
-            _log($"{Ts()} Sync: pulled {pullResult.Runners.Count} runner(s). [Bulk push skipped — DLL lacks DbReadAllTeiln]");
+            _log($"{Ts()} Sync: pulled {pullResult.Runners.Count} runner(s).");
 
         // Update watermark
         settings.LastServerTimeUtc = pullResult.ServerTimeUtc;
         settings.Save();
-        UpdateLastSync();
     }
 
-    private void UpdateLastSync()
+    /// <summary>
+    /// WORKAROUND: iterates StartNr 1–4000, uses GetIdNrListByStartNr to find runners,
+    /// then calls GetTeilnInfoByIdNr for each to populate Name, Surname, ClassName, ClubName, ChipNr.
+    /// Buffer format confirmed: Key=Value lines (Grupa, IdNr, StartNr, Name, Vorname, Klubs,
+    /// ChipNr1..3, KatNr, Start1Raw, Start1, Start2Raw, Start2, Start3Raw, Start3, MldKen1..3, Rent).
+    /// Replace with DbReadAllTeiln when the Delphi developer adds that bulk-read function.
+    /// </summary>
+    private List<BulkRunnerDto> ScanRunnersByStartNr(AppSettings settings)
     {
-        // Trigger UI update via log (MainForm listens to log callback which calls UpdateLastSyncLabel)
+        const int maxStartNr = 4000;
+        var results = new List<BulkRunnerDto>();
+
+        if (string.IsNullOrEmpty(settings.DbIsamPath))
+        {
+            _log($"{Ts()} Scan: DB path not set.");
+            return results;
+        }
+
+        using var db = new DbBridgeService(_log);
+        if (!db.Open(settings.DbIsamPath))
+        {
+            _log($"{Ts()} Scan: cannot open DBISAM.");
+            return results;
+        }
+
+        _log($"{Ts()} Scanning start numbers 1–{maxStartNr}...");
+
+        for (int startNr = 1; startNr <= maxStartNr; startNr++)
+        {
+            try
+            {
+                var (listResult, listRaw) = db.GetIdNrListByStartNr(startNr);
+                if (!listResult.Success) continue;
+
+                // Parse IdNr(s) from the buffer (integers separated by comma/newline/space)
+                var idNrs = DbBridgeService.ParseIdNrList(listRaw);
+                int idNr = idNrs.Count > 0 ? idNrs[0] : 0;
+
+                var dto = new BulkRunnerDto { StartNumber = startNr, StatusId = 1 };
+
+                if (idNr > 0)
+                {
+                    var (infoResult, infoRaw) = db.GetTeilnInfoByIdNr(idNr);
+                    if (infoResult.Success && !string.IsNullOrEmpty(infoRaw))
+                    {
+                        var fields = DbBridgeService.ParseTeilnInfo(infoRaw);
+                        // Field names confirmed from actual DllTest.exe output:
+                        // Grupa, IdNr, Rent, StartNr, ClubNr, KatNr, Name, Vorname, Klubs,
+                        // ChipNr1..3, MldKen1..3, Start1Raw, Start1, Start2Raw, Start2, Start3Raw, Start3
+                        dto.Surname = GetField(fields, "Name") ?? "";
+                        dto.Name = GetField(fields, "Vorname") ?? "";
+                        dto.ClassId = int.TryParse(GetField(fields, "KatNr"), out var katNr) ? katNr : 0;
+                        dto.ClassName = GetField(fields, "Grupa") ?? "";
+                        dto.ClubId = int.TryParse(GetField(fields, "ClubNr"), out var clubNr) ? clubNr : 0;
+                        dto.ClubName = GetField(fields, "Klubs") ?? "";
+                        var chipStr = GetField(fields, "ChipNr1", "ChipNr2", "ChipNr3");
+                        if (!string.IsNullOrEmpty(chipStr)) dto.SiChipNo = chipStr;
+                        dto.StartTime = GetField(fields, $"Start{settings.DayNo}"); // "HH:mm:ss"
+                    }
+                }
+
+                results.Add(dto);
+            }
+            catch (Exception ex)
+            {
+                _log($"{Ts()} Scan startNr={startNr} failed: {ex.Message}");
+                _log($"{Ts()} Check DLL logs: {DbBridgeService.GlobalDllLogPath}");
+                if (!string.IsNullOrWhiteSpace(settings.DbIsamPath))
+                    _log($"{Ts()} Check DB log: {DbBridgeService.DbErrorLogPath(settings.DbIsamPath)}");
+            }
+
+            if (results.Count > 0 && results.Count % 100 == 0)
+                _log($"{Ts()} Scanned {startNr}/{maxStartNr}, found {results.Count} so far...");
+        }
+
+        _log($"{Ts()} Scan complete: {results.Count} runners found in {maxStartNr} start numbers.");
+        return results;
+    }
+
+    private static string? GetField(Dictionary<string, string> fields, params string[] names)
+    {
+        foreach (var name in names)
+            if (fields.TryGetValue(name, out var val) && !string.IsNullOrWhiteSpace(val))
+                return val;
+        return null;
+    }
+
+    public async Task<UpsertLookupResponse?> PushClassesAsync()
+    {
+        var settings = _getSettings();
+        var runners = ScanRunnersByStartNr(settings);
+        var classes = runners
+            .Where(r => r.ClassId > 0 && !string.IsNullOrWhiteSpace(r.ClassName))
+            .GroupBy(r => r.ClassId)
+            .Select(g => new LookupItemDto
+            {
+                Id = g.Key,
+                Name = g.First().ClassName.Trim()
+            })
+            .Where(x => x.Name.Length > 0)
+            .OrderBy(x => x.Id)
+            .ToList();
+
+        if (classes.Count == 0)
+        {
+            _log($"{Ts()} Push Classes: nothing to push.");
+            return new UpsertLookupResponse();
+        }
+
+        var response = await _api.UpsertClassesAsync(new UpsertLookupRequest
+        {
+            Source = settings.DeviceName,
+            LastModifiedUtc = DateTimeOffset.UtcNow,
+            Items = classes
+        });
+
+        if (response is null)
+            _log($"{Ts()} Push Classes: upload failed — API unreachable.");
+        else
+            _log($"{Ts()} Push Classes: inserted={response.Inserted} updated={response.Updated} unchanged={response.Unchanged}");
+
+        return response;
+    }
+
+    public async Task<UpsertLookupResponse?> PushClubsAsync()
+    {
+        var settings = _getSettings();
+        var runners = ScanRunnersByStartNr(settings);
+        var clubs = runners
+            .Where(r => r.ClubId > 0 && !string.IsNullOrWhiteSpace(r.ClubName))
+            .GroupBy(r => r.ClubId)
+            .Select(g => new LookupItemDto
+            {
+                Id = g.Key,
+                Name = g.First().ClubName.Trim()
+            })
+            .Where(x => x.Name.Length > 0)
+            .OrderBy(x => x.Id)
+            .ToList();
+
+        if (clubs.Count == 0)
+        {
+            _log($"{Ts()} Push Clubs: nothing to push.");
+            return new UpsertLookupResponse();
+        }
+
+        var response = await _api.UpsertClubsAsync(new UpsertLookupRequest
+        {
+            Source = settings.DeviceName,
+            LastModifiedUtc = DateTimeOffset.UtcNow,
+            Items = clubs
+        });
+
+        if (response is null)
+            _log($"{Ts()} Push Clubs: upload failed — API unreachable.");
+        else
+            _log($"{Ts()} Push Clubs: inserted={response.Inserted} updated={response.Updated} unchanged={response.Unchanged}");
+
+        return response;
     }
 
     private static string Ts() => DateTime.Now.ToString("HH:mm:ss");

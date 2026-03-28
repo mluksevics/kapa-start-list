@@ -23,11 +23,8 @@ public partial class MainForm : Form
         _api = new ApiClient(() => _settings);
         _syncService = new SyncService(_api, () => _settings, AppendLog);
 
-        LoadSettingsToUi();
+        LoadSettingsToUi();   // sets chkAutoSync, which fires Start() if enabled
         LoadStagesFromDb();
-
-        if (_settings.AutoSyncEnabled)
-            _syncService.Start();
 
         UpdateStatusLabel("Idle");
     }
@@ -68,7 +65,13 @@ public partial class MainForm : Form
                     todayIndex = cmbDay.Items.Count - 1;
             }
         }
-        catch { /* DB unavailable — leave combo empty */ }
+        catch (Exception ex)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Failed to load stages from DBISAM: {ex.Message}");
+            AppendLog($"{DateTime.Now:HH:mm:ss} Check DLL logs: {DbBridgeService.GlobalDllLogPath}");
+            if (!string.IsNullOrWhiteSpace(_settings.DbIsamPath))
+                AppendLog($"{DateTime.Now:HH:mm:ss} Check DB log: {DbBridgeService.DbErrorLogPath(_settings.DbIsamPath)}");
+        }
 
         if (cmbDay.Items.Count == 0) return;
 
@@ -165,6 +168,30 @@ public partial class MainForm : Form
         finally { btnForcePush.Enabled = true; UpdateStatusLabel("Idle"); }
     }
 
+    private async void btnPushClubs_Click(object sender, EventArgs e)
+    {
+        btnPushClubs.Enabled = false;
+        UpdateStatusLabel("Pushing clubs...");
+        try
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push Clubs initiated.");
+            await _syncService.PushClubsAsync();
+        }
+        finally { btnPushClubs.Enabled = true; UpdateStatusLabel("Idle"); }
+    }
+
+    private async void btnPushClasses_Click(object sender, EventArgs e)
+    {
+        btnPushClasses.Enabled = false;
+        UpdateStatusLabel("Pushing classes...");
+        try
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push Classes initiated.");
+            await _syncService.PushClassesAsync();
+        }
+        finally { btnPushClasses.Enabled = true; UpdateStatusLabel("Idle"); }
+    }
+
     private void txtApiUrl_Leave(object sender, EventArgs e)
     {
         _settings.ApiBaseUrl = txtApiUrl.Text.Trim();
@@ -199,6 +226,28 @@ public partial class MainForm : Form
     {
         using var form = new DbBridgeExplorerForm();
         form.ShowDialog(this);
+    }
+
+    private async void btnPeekWebApi_Click(object sender, EventArgs e)
+    {
+        btnPeekWebApi.Enabled = false;
+        UpdateStatusLabel("Peeking WebApi...");
+        try
+        {
+            var counts = await _api.GetLookupCountsAsync();
+            if (counts is null)
+            {
+                AppendLog($"{DateTime.Now:HH:mm:ss} Peek in WebApi failed: no response.");
+                return;
+            }
+
+            AppendLog($"{DateTime.Now:HH:mm:ss} WebApi SQL counts -> competitors: {counts.Competitors}, clubs: {counts.Clubs}, classes: {counts.Classes}");
+        }
+        finally
+        {
+            btnPeekWebApi.Enabled = true;
+            UpdateStatusLabel("Idle");
+        }
     }
 
     private void chkAutoSync_CheckedChanged(object sender, EventArgs e)

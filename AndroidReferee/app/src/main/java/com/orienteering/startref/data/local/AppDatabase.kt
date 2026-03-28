@@ -9,7 +9,7 @@ import com.orienteering.startref.data.local.entity.RunnerEntity
 
 @Database(
     entities = [RunnerEntity::class, PendingSyncEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -20,6 +20,13 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE runners ADD COLUMN dns INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE runners ADD COLUMN classId INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE runners ADD COLUMN clubId INTEGER NOT NULL DEFAULT 0")
             }
         }
 

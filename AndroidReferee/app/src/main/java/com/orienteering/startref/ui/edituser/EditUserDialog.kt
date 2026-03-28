@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.orienteering.startref.data.local.ClassEntry
 import com.orienteering.startref.data.local.entity.RunnerEntity
 import java.time.Instant
 import java.time.LocalDateTime
@@ -44,7 +45,7 @@ import java.time.ZoneId
 @Composable
 fun EditUserDialog(
     runner: RunnerEntity,
-    availableClasses: List<String>,
+    availableClasses: List<ClassEntry>,
     currentTimeMs: Long,
     onDismiss: () -> Unit,
     onSave: (RunnerEntity) -> Unit
@@ -57,7 +58,7 @@ fun EditUserDialog(
     var name by remember { mutableStateOf(runner.name) }
     var surname by remember { mutableStateOf(runner.surname) }
     var siCard by remember { mutableStateOf(runner.siCard) }
-    var selectedClass by remember { mutableStateOf(runner.className) }
+    var selectedClassEntry by remember { mutableStateOf(ClassEntry(runner.classId, runner.className)) }
     var classDropdownExpanded by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
 
@@ -70,7 +71,7 @@ fun EditUserDialog(
     val classGroup = classGroupOf(runner.className)
     val isClassEditable = classGroup != null
     val filteredClasses = if (classGroup != null)
-        availableClasses.filter { classGroupOf(it) == classGroup }
+        availableClasses.filter { classGroupOf(it.className) == classGroup }
     else emptyList()
 
     fun nowPlusMinutes(minutes: Int): Long {
@@ -95,7 +96,8 @@ fun EditUserDialog(
             name = name.trim(),
             surname = surname.trim(),
             siCard = siCard.trim(),
-            className = selectedClass,
+            classId = selectedClassEntry.classId,
+            className = selectedClassEntry.className,
             startTime = newStartTime
         )
     }
@@ -158,7 +160,7 @@ fun EditUserDialog(
                         onExpandedChange = { classDropdownExpanded = it }
                     ) {
                         OutlinedTextField(
-                            value = selectedClass,
+                            value = selectedClassEntry.className,
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Class") },
@@ -171,11 +173,11 @@ fun EditUserDialog(
                             expanded = classDropdownExpanded,
                             onDismissRequest = { classDropdownExpanded = false }
                         ) {
-                            filteredClasses.forEach { cls ->
+                            filteredClasses.forEach { entry ->
                                 DropdownMenuItem(
-                                    text = { Text(cls) },
+                                    text = { Text(entry.className) },
                                     onClick = {
-                                        selectedClass = cls
+                                        selectedClassEntry = entry
                                         classDropdownExpanded = false
                                     }
                                 )
@@ -184,7 +186,7 @@ fun EditUserDialog(
                     }
                 } else {
                     OutlinedTextField(
-                        value = selectedClass,
+                        value = selectedClassEntry.className,
                         onValueChange = {},
                         readOnly = true,
                         enabled = false,

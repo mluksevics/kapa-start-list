@@ -24,7 +24,6 @@ class SettingsDataStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private object Keys {
-        val XML_URL = stringPreferencesKey("xml_url")
         val API_BASE_URL = stringPreferencesKey("api_base_url")
         val API_KEY = stringPreferencesKey("api_key")
         val HEADER_TEXT = stringPreferencesKey("header_text")
@@ -40,7 +39,6 @@ class SettingsDataStore @Inject constructor(
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
         AppSettings(
-            xmlUrl = prefs[Keys.XML_URL] ?: AppSettings.DEFAULT.xmlUrl,
             apiBaseUrl = prefs[Keys.API_BASE_URL] ?: AppSettings.DEFAULT.apiBaseUrl,
             apiKey = prefs[Keys.API_KEY] ?: AppSettings.DEFAULT.apiKey,
             headerText = prefs[Keys.HEADER_TEXT] ?: AppSettings.DEFAULT.headerText,
@@ -55,7 +53,6 @@ class SettingsDataStore @Inject constructor(
         )
     }
 
-    suspend fun updateXmlUrl(value: String) = context.dataStore.edit { it[Keys.XML_URL] = value }
     suspend fun updateApiBaseUrl(value: String) = context.dataStore.edit { it[Keys.API_BASE_URL] = value }
     suspend fun updateApiKey(value: String) = context.dataStore.edit { it[Keys.API_KEY] = value }
     suspend fun updateHeaderText(value: String) = context.dataStore.edit { it[Keys.HEADER_TEXT] = value }

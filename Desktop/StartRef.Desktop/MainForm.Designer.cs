@@ -17,11 +17,10 @@ partial class MainForm
     private NumericUpDown nudInterval;
     private Label lblIntervalUnit;
     private Label lblLastSyncCaption, lblLastSync;
-    private Button btnSyncNow, btnForcePush, btnDbExplorer;
+    private Button btnSyncNow, btnForcePush, btnPushClubs, btnPushClasses, btnDbExplorer, btnPeekWebApi;
     private Label lblStatus;
     private TextBox txtLog;
     private Label lblLogCaption;
-    private TableLayoutPanel tlpSettings;
 
     protected override void Dispose(bool disposing)
     {
@@ -136,16 +135,41 @@ partial class MainForm
         };
         btnForcePush.Click += btnForcePush_Click;
 
+        btnPushClubs = new Button
+        {
+            Text = "Push Clubs",
+            Location = new System.Drawing.Point(270, y),
+            Size = new System.Drawing.Size(110, 30)
+        };
+        btnPushClubs.Click += btnPushClubs_Click;
+
+        btnPushClasses = new Button
+        {
+            Text = "Push Classes",
+            Location = new System.Drawing.Point(390, y),
+            Size = new System.Drawing.Size(110, 30)
+        };
+        btnPushClasses.Click += btnPushClasses_Click;
+
         btnDbExplorer = new Button
         {
             Text = "DbBridge Explorer",
-            Location = new System.Drawing.Point(270, y),
+            Location = new System.Drawing.Point(510, y),
             Size = new System.Drawing.Size(140, 30)
         };
         btnDbExplorer.Click += btnDbExplorer_Click;
 
-        lblStatus = MakeLabel("Status: Idle", 420, y + 8, 280);
-        y += 40;
+        btnPeekWebApi = new Button
+        {
+            Text = "Peek in WebApi",
+            Location = new System.Drawing.Point(660, y),
+            Size = new System.Drawing.Size(110, 30)
+        };
+        btnPeekWebApi.Click += btnPeekWebApi_Click;
+
+        y += 34;
+        lblStatus = MakeLabel("Status: Idle", 10, y, 180);
+        y += 28;
 
         // ── Log ───────────────────────────────────────────────────────────────
         lblLogCaption = MakeLabel("Log:", 10, y, 50);
@@ -169,7 +193,7 @@ partial class MainForm
             chkAutoSync, lblIntervalCaption, nudInterval, lblIntervalUnit,
             lblLastSyncCaption, lblLastSync,
             sep,
-            btnSyncNow, btnForcePush, btnDbExplorer, lblStatus,
+            btnSyncNow, btnForcePush, btnPushClubs, btnPushClasses, btnDbExplorer, btnPeekWebApi, lblStatus,
             lblLogCaption, txtLog
         });
     }

@@ -27,8 +27,7 @@ Status transitions are **forward-only**: once a runner is Started or DNS they ca
 
 ### Start list source
 
-- Loaded from a remote IOF XML v3 URL (Settings → XML URL)
-- On re-sync, only XML fields are merged; statusId is preserved
+- Loaded from the StartRef API
 - Persisted locally in Room DB; the app works fully offline after the first sync
 
 ### Delta sync
@@ -67,7 +66,6 @@ Status transitions are **forward-only**: once a runner is Started or DNS they ca
 
 | Setting | Description |
 |---------|-------------|
-| XML URL | IOF XML v3 start list URL |
 | API Base URL | StartRef API base URL |
 | API Key | `X-Api-Key` header value for mutations |
 | Competition Date | `yyyy-MM-dd` date used for all API calls (defaults to today) |
@@ -88,10 +86,9 @@ Status transitions are **forward-only**: once a runner is Started or DNS they ca
 - Room DB v3 (local persistence with migrations v1→2→3)
 - DataStore Preferences (settings + sync watermark)
 - WorkManager (pending PATCH retry)
-- OkHttp (XML download + API calls)
+- OkHttp (API calls)
 - usb-serial-for-android (USB OTG serial, from JitPack)
 - `java.time` for all date/time handling
-- XmlPullParser for IOF XML v3 (supports `windows-1257` encoding)
 
 ## Minimum SDK
 
@@ -105,7 +102,7 @@ API 26 (Android 8.0)
 app/src/main/java/com/orienteering/startref/
   data/
     local/          Room entities (RunnerEntity v3, PendingSyncEntity), DAOs, AppDatabase
-    remote/         ApiClient (PATCH + GET), XmlStartListParser
+    remote/         ApiClient (PATCH + GET)
     repository/     StartListRepository
     settings/       AppSettings, SettingsDataStore
     si/             SiStationReader (USB OTG SportIdent)
@@ -132,4 +129,4 @@ app/src/main/java/com/orienteering/startref/
 ./gradlew assembleDebug
 ```
 
-A sample `startlis.xml` in the repo root is automatically copied to `app/src/main/assets/` before each build. Use **Settings → Load sample data** to load it without a network connection.
+Initial load and all subsequent syncs come from the StartRef API.

@@ -36,9 +36,11 @@ class PendingSyncWorker @AssistedInject constructor(
                     siCard = body.optString("siChipNo").takeIf { body.has("siChipNo") },
                     name = body.optString("name").takeIf { body.has("name") },
                     surname = body.optString("surname").takeIf { body.has("surname") },
-                    clubName = body.optString("clubName").takeIf { body.has("clubName") },
+                    classId = body.optInt("classId").takeIf { body.has("classId") },
+                    clubId = body.optInt("clubId").takeIf { body.has("clubId") },
                     country = body.optString("country").takeIf { body.has("country") },
                     startPlace = body.optInt("startPlace").takeIf { body.has("startPlace") },
+                    startTime = body.optString("startTime").takeIf { body.has("startTime") },
                     lastModifiedAtMs = body.getLong("lastModifiedAtMs"),
                     source = settings.deviceName,
                     settings = settings

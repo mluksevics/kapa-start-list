@@ -27,7 +27,7 @@ public class SettingsDialog : Form
             Text = current.ApiKey,
             Location = new(lw + 10, y),
             Width = tw,
-            UseSystemPasswordChar = true
+            UseSystemPasswordChar = false
         };
         y += 30;
 

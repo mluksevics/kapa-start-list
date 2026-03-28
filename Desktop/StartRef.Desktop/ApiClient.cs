@@ -67,4 +67,67 @@ public class ApiClient
             return null;
         }
     }
+
+    public async Task<UpsertLookupResponse?> UpsertClassesAsync(
+        UpsertLookupRequest request,
+        CancellationToken ct = default)
+    {
+        var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/lookups/classes";
+        var msg = new HttpRequestMessage(HttpMethod.Put, url)
+        {
+            Content = JsonContent.Create(request)
+        };
+        msg.Headers.Add("X-Api-Key", S.ApiKey);
+
+        try
+        {
+            var response = await _http.SendAsync(msg, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            return await response.Content.ReadFromJsonAsync<UpsertLookupResponse>(ct);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<UpsertLookupResponse?> UpsertClubsAsync(
+        UpsertLookupRequest request,
+        CancellationToken ct = default)
+    {
+        var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/lookups/clubs";
+        var msg = new HttpRequestMessage(HttpMethod.Put, url)
+        {
+            Content = JsonContent.Create(request)
+        };
+        msg.Headers.Add("X-Api-Key", S.ApiKey);
+
+        try
+        {
+            var response = await _http.SendAsync(msg, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            return await response.Content.ReadFromJsonAsync<UpsertLookupResponse>(ct);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<LookupCountsResponse?> GetLookupCountsAsync(CancellationToken ct = default)
+    {
+        var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/lookups/counts";
+        try
+        {
+            var msg = new HttpRequestMessage(HttpMethod.Get, url);
+            msg.Headers.Add("X-Api-Key", S.ApiKey);
+            var response = await _http.SendAsync(msg, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            return await response.Content.ReadFromJsonAsync<LookupCountsResponse>(ct);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }

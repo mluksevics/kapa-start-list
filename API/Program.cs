@@ -34,6 +34,7 @@ app.MapRootEndpoints();
 app.MapStatusEndpoints();
 app.MapCompetitionEndpoints();
 app.MapRunnerEndpoints();
+app.MapLookupEndpoints();
 app.MapChangeLogEndpoints();
 
 app.Run();

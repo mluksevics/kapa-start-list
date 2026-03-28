@@ -58,7 +58,6 @@ fun SettingsScreen(
     var showClearConfirm by remember { mutableStateOf(false) }
 
     // Local form state — initialized once from the first real DataStore emission
-    var xmlUrl by rememberSaveable { mutableStateOf("") }
     var apiBaseUrl by rememberSaveable { mutableStateOf("") }
     var apiKey by rememberSaveable { mutableStateOf("") }
     var headerText by rememberSaveable { mutableStateOf("") }
@@ -70,7 +69,6 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         if (!fieldsReady) {
             val s = viewModel.awaitSettings()
-            xmlUrl = s.xmlUrl
             apiBaseUrl = s.apiBaseUrl
             apiKey = s.apiKey
             headerText = s.headerText
@@ -160,27 +158,10 @@ fun SettingsScreen(
                 }
             }
 
-            OutlinedButton(
-                onClick = { viewModel.loadSampleData() },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
-            ) {
-                Text("Load sample data (startlis.xml)")
-            }
-
             SettingField(label = "Header") {
                 OutlinedTextField(
                     value = headerText,
                     onValueChange = { headerText = it; viewModel.updateHeaderText(it) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-            }
-
-            SettingField(label = "Start list location") {
-                OutlinedTextField(
-                    value = xmlUrl,
-                    onValueChange = { xmlUrl = it; viewModel.updateXmlUrl(it) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )

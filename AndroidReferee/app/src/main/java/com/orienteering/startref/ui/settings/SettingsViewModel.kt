@@ -40,7 +40,6 @@ class SettingsViewModel @Inject constructor(
     /** Suspends until the real stored settings are available (not DEFAULT). */
     suspend fun awaitSettings(): AppSettings = settingsDataStore.settings.first()
 
-    fun updateXmlUrl(value: String) = viewModelScope.launch { settingsDataStore.updateXmlUrl(value) }
     fun updateApiBaseUrl(value: String) = viewModelScope.launch { settingsDataStore.updateApiBaseUrl(value) }
     fun updateApiKey(value: String) = viewModelScope.launch { settingsDataStore.updateApiKey(value) }
     fun updateHeaderText(value: String) = viewModelScope.launch { settingsDataStore.updateHeaderText(value) }
@@ -54,24 +53,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                repository.reloadFromXml(settings.value.xmlUrl)
+                repository.reloadFromApi()
                 _message.value = "Start list loaded successfully"
             } catch (e: Exception) {
                 _message.value = "Failed to load: ${e.message}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-
-    fun loadSampleData() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                repository.loadFromAsset("startlis.xml")
-                _message.value = "Sample data loaded (startlis.xml)"
-            } catch (e: Exception) {
-                _message.value = "Failed to load sample: ${e.message}"
             } finally {
                 _isLoading.value = false
             }

@@ -13,11 +13,14 @@ public sealed record BulkRunnerDto(
     string? SiChipNo,
     string Name,
     string Surname,
+    int ClassId,
     string ClassName,
+    int ClubId,
     string ClubName,
     string? Country,
     int StatusId,
-    int StartPlace
+    int StartPlace,
+    string? StartTime
 );
 
 public sealed record BulkUploadResponse(

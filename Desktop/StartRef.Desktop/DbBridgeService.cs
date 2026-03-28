@@ -27,6 +27,7 @@ public record EtapInfo(string Name, string Date, int Nullzeit)
 public class DbBridgeService : IDisposable
 {
     private IntPtr _ctx = IntPtr.Zero;
+    private string _dataDir = string.Empty;
     private readonly Action<string>? _log;
 
     public bool IsOpen => _ctx != IntPtr.Zero;
@@ -34,6 +35,15 @@ public class DbBridgeService : IDisposable
     /// <summary>True if DbBridge.dll is present next to the EXE.</summary>
     public static bool IsAvailable =>
         File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DbBridge.dll"));
+
+    public static string GlobalDllLogPath =>
+        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DbBridge_dll.log");
+
+    public static string DbErrorLogPath(string dataDir, DateTime? date = null)
+    {
+        var logDate = (date ?? DateTime.Now).ToString("yyyyMMdd");
+        return Path.Combine(dataDir, "logs", $"DbBridge_{logDate}.log");
+    }
 
     public DbBridgeService(Action<string>? log = null)
     {
@@ -46,12 +56,15 @@ public class DbBridgeService : IDisposable
     public bool Open(string dataDir)
     {
         if (IsOpen) return true;
+        _dataDir = dataDir;
         try
         {
             _ctx = DbBridgeNative.DbOpen(dataDir);
             if (_ctx == IntPtr.Zero)
             {
                 _log?.Invoke("DbOpen returned NULL — check path and DLL dependencies.");
+                _log?.Invoke($"Check DLL logs: {GlobalDllLogPath}");
+                _log?.Invoke($"Check DB log: {DbErrorLogPath(_dataDir)}");
                 return false;
             }
             _log?.Invoke($"DB opened: {dataDir}");
@@ -60,16 +73,20 @@ public class DbBridgeService : IDisposable
         catch (DllNotFoundException ex)
         {
             _log?.Invoke($"DbBridge.dll not found: {ex.Message}");
+            _log?.Invoke($"Check DLL logs: {GlobalDllLogPath}");
             return false;
         }
         catch (BadImageFormatException ex)
         {
             _log?.Invoke($"Architecture mismatch (app must run as x86): {ex.Message}");
+            _log?.Invoke($"Check DLL logs: {GlobalDllLogPath}");
             return false;
         }
         catch (Exception ex)
         {
             _log?.Invoke($"DbOpen exception: {ex.Message}");
+            _log?.Invoke($"Check DLL logs: {GlobalDllLogPath}");
+            _log?.Invoke($"Check DB log: {DbErrorLogPath(_dataDir)}");
             return false;
         }
     }
@@ -110,7 +127,10 @@ public class DbBridgeService : IDisposable
     private DbBridgeResult Fail(int code)
     {
         var err = GetLastError();
-        var msg = string.IsNullOrWhiteSpace(err) ? CodeName(code) : err;
+        var root = string.IsNullOrWhiteSpace(err) ? CodeName(code) : err;
+        var msg = _dataDir.Length > 0
+            ? $"{root} | Logs: {GlobalDllLogPath}; {DbErrorLogPath(_dataDir)}"
+            : $"{root} | Log: {GlobalDllLogPath}";
         return new(false, code, msg);
     }
 
@@ -213,4 +233,43 @@ public class DbBridgeService : IDisposable
 
     public DbBridgeResult ChangeKatNrByChipNr(int dayNo, int newKatNr, int chipNr) =>
         IsOpen ? Wrap(DbBridgeNative.DbChangeKatNrByChipNr(_ctx, dayNo, newKatNr, chipNr), "KatNr updated") : NotOpen();
+
+    // ── Update Name ───────────────────────────────────────────────────────────
+
+    /// <summary>Updates the Name field in the given table (e.g. "Teiln") by IdNr.</summary>
+    public DbBridgeResult UpdateName(string tableName, int idNr, string newName) =>
+        IsOpen ? Wrap(DbBridgeNative.DbUpdateName(_ctx, tableName, idNr, newName), "Name updated") : NotOpen();
+
+    // ── Buffer parsing helpers ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Parses the raw buffer from GetIdNrListByStartNr into a list of IdNr integers.
+    /// Handles comma, newline, space, semicolon, and pipe-separated values.
+    /// </summary>
+    public static List<int> ParseIdNrList(string? raw)
+    {
+        var result = new List<int>();
+        if (string.IsNullOrWhiteSpace(raw)) return result;
+        foreach (var token in raw.Split(new[] { ',', '\n', '\r', ' ', ';', '|' }, StringSplitOptions.RemoveEmptyEntries))
+            if (int.TryParse(token.Trim(), out int id) && id > 0)
+                result.Add(id);
+        return result;
+    }
+
+    /// <summary>
+    /// Parses the raw buffer from GetTeilnInfoByIdNr into a key→value dictionary.
+    /// Tries line-by-line "Key=Value" format first. Returns empty dict if format not recognized.
+    /// </summary>
+    public static Dictionary<string, string> ParseTeilnInfo(string? raw)
+    {
+        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(raw)) return fields;
+        foreach (var line in raw.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var eq = line.IndexOf('=');
+            if (eq > 0)
+                fields[line[..eq].Trim()] = line[(eq + 1)..].Trim();
+        }
+        return fields;
+    }
 }

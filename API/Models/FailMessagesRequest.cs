@@ -8,12 +8,15 @@ public sealed record RunnerResponse(
     string? SiChipNo,
     string Name,
     string Surname,
+    int ClassId,
     string ClassName,
+    int ClubId,
     string ClubName,
     string? Country,
     int StatusId,
     string StatusName,
     int StartPlace,
+    string? StartTime,
     DateTimeOffset LastModifiedUtc,
     string LastModifiedBy
 );

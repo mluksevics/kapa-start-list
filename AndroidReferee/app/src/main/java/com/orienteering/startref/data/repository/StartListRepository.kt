@@ -5,13 +5,14 @@ import android.content.Context
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import com.orienteering.startref.data.local.ClassEntry
 import com.orienteering.startref.data.local.PendingSyncDao
 import com.orienteering.startref.data.local.RunnerDao
 import com.orienteering.startref.data.local.entity.PendingSyncEntity
 import com.orienteering.startref.data.local.entity.RunnerEntity
 import com.orienteering.startref.data.remote.ApiClient
-import com.orienteering.startref.data.remote.XmlStartListParser
 import com.orienteering.startref.data.settings.SettingsDataStore
+import com.orienteering.startref.data.sync.SyncManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -28,47 +29,22 @@ import javax.inject.Singleton
 class StartListRepository @Inject constructor(
     private val runnerDao: RunnerDao,
     private val pendingSyncDao: PendingSyncDao,
-    private val xmlParser: XmlStartListParser,
+    private val syncManager: SyncManager,
     private val apiClient: ApiClient,
     private val settingsDataStore: SettingsDataStore,
     @ApplicationContext private val context: Context
 ) {
     fun observeRunners(): Flow<List<RunnerEntity>> = runnerDao.observeAll()
 
-    fun observeClasses(): Flow<List<String>> = runnerDao.observeDistinctClasses()
+    fun observeClasses(): Flow<List<ClassEntry>> = runnerDao.observeDistinctClasses()
 
     fun observeSyncCounts(): Flow<Pair<Int, Int>> = combine(
         pendingSyncDao.observeSentCount(),
         pendingSyncDao.observeTotalCount()
     ) { sent, total -> sent to total }
 
-    suspend fun loadFromAsset(assetName: String) {
-        val newRunners = xmlParser.parseFromAsset(context, assetName)
-        mergeRunners(newRunners)
-    }
-
-    suspend fun reloadFromXml(url: String) {
-        val newRunners = xmlParser.fetchAndParse(url)
-        mergeRunners(newRunners)
-    }
-
-    private suspend fun mergeRunners(newRunners: List<RunnerEntity>) {
-        newRunners.forEach { runner ->
-            val existing = runnerDao.getByStartNumber(runner.startNumber)
-            if (existing != null) {
-                runnerDao.updateXmlFields(
-                    startNumber = runner.startNumber,
-                    name = runner.name,
-                    surname = runner.surname,
-                    siCard = runner.siCard,
-                    className = runner.className,
-                    clubName = runner.clubName,
-                    startTime = runner.startTime
-                )
-            } else {
-                runnerDao.insert(runner)
-            }
-        }
+    suspend fun reloadFromApi() {
+        syncManager.fullSync()
     }
 
     /** Sets a runner's status to Started (2) and queues a PATCH. */
@@ -115,9 +91,11 @@ class StartListRepository @Inject constructor(
                 put("siChipNo", runner.siCard)
                 put("name", runner.name)
                 put("surname", runner.surname)
-                put("clubName", runner.clubName)
+                put("classId", runner.classId)
+                put("clubId", runner.clubId)
                 put("country", runner.country)
                 put("startPlace", runner.startPlace)
+                if (runner.startTime > 0) put("startTime", epochToHhmmss(runner.startTime))
             },
             lastModifiedAtMs = now,
             settings = settings
@@ -170,9 +148,11 @@ class StartListRepository @Inject constructor(
             siCard = body.optString("siChipNo").takeIf { body.has("siChipNo") },
             name = body.optString("name").takeIf { body.has("name") },
             surname = body.optString("surname").takeIf { body.has("surname") },
-            clubName = body.optString("clubName").takeIf { body.has("clubName") },
+            classId = body.optInt("classId").takeIf { body.has("classId") },
+            clubId = body.optInt("clubId").takeIf { body.has("clubId") },
             country = body.optString("country").takeIf { body.has("country") },
             startPlace = body.optInt("startPlace").takeIf { body.has("startPlace") },
+            startTime = body.optString("startTime").takeIf { body.has("startTime") },
             lastModifiedAtMs = lastModifiedAtMs,
             source = settings.deviceName,
             settings = settings
@@ -186,6 +166,10 @@ class StartListRepository @Inject constructor(
 
     private fun epochToIso(epochMs: Long): String =
         DateTimeFormatter.ISO_OFFSET_DATE_TIME
+            .format(Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()))
+
+    private fun epochToHhmmss(epochMs: Long): String =
+        DateTimeFormatter.ofPattern("HH:mm:ss")
             .format(Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()))
 
     private fun writeToDownloads(fileName: String, content: String) {
