@@ -6,6 +6,11 @@ public partial class MainForm : Form
     private readonly ApiClient _api;
     private readonly SyncService _syncService;
     private readonly string _logFilePath;
+    private bool _startupPeekCompleted;
+    private CancellationTokenSource? _cancelSyncCts;
+    private string? _runningCommandName;
+    private System.Windows.Forms.Timer? _runningStatusTimer;
+    private DateTimeOffset _runningStartedAtUtc;
 
     private sealed record EtapItem(int DayNo, string Name, string Date)
     {
@@ -18,15 +23,26 @@ public partial class MainForm : Form
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
 
         _settings = AppSettings.Load();
+        DbBridgeService.SetCodePage(_settings.DbCodePage);
         _logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sync_log.txt");
 
         _api = new ApiClient(() => _settings);
         _syncService = new SyncService(_api, () => _settings, AppendLog);
+        _syncService.AutoSyncStarted += SyncService_AutoSyncStarted;
+        _syncService.AutoSyncFinished += SyncService_AutoSyncFinished;
 
         LoadSettingsToUi();   // sets chkAutoSync, which fires Start() if enabled
         LoadStagesFromDb();
+        Shown += MainForm_Shown;
 
         UpdateStatusLabel("Idle");
+    }
+
+    private async void MainForm_Shown(object? sender, EventArgs e)
+    {
+        if (_startupPeekCompleted) return;
+        _startupPeekCompleted = true;
+        await RunPeekWebApiAsync();
     }
 
     private void LoadSettingsToUi()
@@ -139,14 +155,86 @@ public partial class MainForm : Form
         lblStatus.Text = $"Status: {status}";
     }
 
+    private bool TryBeginCancelableCommand(string commandName)
+    {
+        if (_cancelSyncCts is not null)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Cannot start {commandName}: {_runningCommandName ?? "another command"} is already running.");
+            return false;
+        }
+
+        _syncService.Stop();
+        _runningCommandName = commandName;
+        _cancelSyncCts = new CancellationTokenSource();
+        btnCancelSync.Enabled = true;
+        btnSyncNow.Enabled = false;
+        btnForcePush.Enabled = false;
+        btnPushClubs.Enabled = false;
+        btnPeekWebApi.Enabled = false;
+        btnPullPast.Enabled = false;
+        StartRunningStatus(commandName);
+        return true;
+    }
+
+    private void EndCancelableCommand()
+    {
+        _cancelSyncCts?.Dispose();
+        _cancelSyncCts = null;
+        _runningCommandName = null;
+        btnCancelSync.Enabled = false;
+        btnSyncNow.Enabled = true;
+        btnForcePush.Enabled = true;
+        btnPushClubs.Enabled = true;
+        btnPeekWebApi.Enabled = true;
+        btnPullPast.Enabled = true;
+        StopRunningStatus();
+        if (_settings.AutoSyncEnabled) _syncService.Start();
+    }
+
+    private void StartRunningStatus(string commandName)
+    {
+        _runningStartedAtUtc = DateTimeOffset.UtcNow;
+        _runningStatusTimer?.Stop();
+        _runningStatusTimer?.Dispose();
+        _runningStatusTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _runningStatusTimer.Tick += (_, _) =>
+        {
+            var elapsed = DateTimeOffset.UtcNow - _runningStartedAtUtc;
+            UpdateStatusLabel($"Running: {commandName} ({(int)elapsed.TotalSeconds}s)");
+        };
+        _runningStatusTimer.Start();
+        UpdateStatusLabel($"Running: {commandName} (0s)");
+    }
+
+    private void StopRunningStatus()
+    {
+        _runningStatusTimer?.Stop();
+        _runningStatusTimer?.Dispose();
+        _runningStatusTimer = null;
+    }
+
     // ── Buttons / handlers ────────────────────────────────────────────────────
 
     private async void btnSyncNow_Click(object sender, EventArgs e)
     {
-        btnSyncNow.Enabled = false;
+        if (!TryBeginCancelableCommand("Sync Now")) return;
+        var cts = _cancelSyncCts;
+        if (cts is null) return;
         UpdateStatusLabel("Syncing...");
-        try { await _syncService.RunCycleAsync(forcePush: false); }
-        finally { btnSyncNow.Enabled = true; UpdateStatusLabel("Idle"); }
+        try
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Sync Now initiated.");
+            await Task.Run(() => _syncService.RunCycleAsync(forcePush: false, cts.Token), cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Sync Now cancelled by user.");
+        }
+        finally
+        {
+            EndCancelableCommand();
+            UpdateStatusLabel("Idle");
+        }
     }
 
     private async void btnForcePush_Click(object sender, EventArgs e)
@@ -158,38 +246,49 @@ public partial class MainForm : Form
                 MessageBoxIcon.Warning) != DialogResult.Yes)
             return;
 
-        btnForcePush.Enabled = false;
+        if (!TryBeginCancelableCommand("Force Push All")) return;
+        var cts = _cancelSyncCts;
+        if (cts is null) return;
         UpdateStatusLabel("Force pushing...");
         try
         {
             AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All initiated.");
-            await _syncService.RunCycleAsync(forcePush: true);
+            AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All step 1/2: running sync.");
+            await Task.Run(() => _syncService.RunCycleAsync(forcePush: false, cts.Token), cts.Token);
+            AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All step 2/2: running force push.");
+            await Task.Run(() => _syncService.ForcePushAllAsync(cts.Token), cts.Token);
         }
-        finally { btnForcePush.Enabled = true; UpdateStatusLabel("Idle"); }
+        catch (OperationCanceledException)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All cancelled by user.");
+        }
+        finally
+        {
+            EndCancelableCommand();
+            UpdateStatusLabel("Idle");
+        }
     }
 
     private async void btnPushClubs_Click(object sender, EventArgs e)
     {
-        btnPushClubs.Enabled = false;
+        if (!TryBeginCancelableCommand("Push Clubs")) return;
+        var cts = _cancelSyncCts;
+        if (cts is null) return;
         UpdateStatusLabel("Pushing clubs...");
         try
         {
             AppendLog($"{DateTime.Now:HH:mm:ss} Push Clubs initiated.");
-            await _syncService.PushClubsAsync();
+            await Task.Run(() => _syncService.PushClubsAsync(cts.Token), cts.Token);
         }
-        finally { btnPushClubs.Enabled = true; UpdateStatusLabel("Idle"); }
-    }
-
-    private async void btnPushClasses_Click(object sender, EventArgs e)
-    {
-        btnPushClasses.Enabled = false;
-        UpdateStatusLabel("Pushing classes...");
-        try
+        catch (OperationCanceledException)
         {
-            AppendLog($"{DateTime.Now:HH:mm:ss} Push Classes initiated.");
-            await _syncService.PushClassesAsync();
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push Clubs cancelled by user.");
         }
-        finally { btnPushClasses.Enabled = true; UpdateStatusLabel("Idle"); }
+        finally
+        {
+            EndCancelableCommand();
+            UpdateStatusLabel("Idle");
+        }
     }
 
     private void txtApiUrl_Leave(object sender, EventArgs e)
@@ -203,6 +302,7 @@ public partial class MainForm : Form
         using var dlg = new SettingsDialog(_settings);
         if (dlg.ShowDialog() != DialogResult.OK) return;
         _settings = dlg.Result;
+        DbBridgeService.SetCodePage(_settings.DbCodePage);
         _settings.Save();
         _syncService.UpdateInterval(_settings.SyncIntervalSeconds);
         LoadSettingsToUi();
@@ -228,13 +328,16 @@ public partial class MainForm : Form
         form.ShowDialog(this);
     }
 
-    private async void btnPeekWebApi_Click(object sender, EventArgs e)
+    private async Task RunPeekWebApiAsync(bool userInitiated = false)
     {
-        btnPeekWebApi.Enabled = false;
+        if (!TryBeginCancelableCommand("Peek in WebApi")) return;
         UpdateStatusLabel("Peeking WebApi...");
         try
         {
-            var counts = await _api.GetLookupCountsAsync();
+            if (userInitiated)
+                AppendLog($"{DateTime.Now:HH:mm:ss} Peek in WebApi initiated.");
+
+            var counts = await _api.GetLookupCountsAsync(_cancelSyncCts!.Token);
             if (counts is null)
             {
                 AppendLog($"{DateTime.Now:HH:mm:ss} Peek in WebApi failed: no response.");
@@ -243,11 +346,94 @@ public partial class MainForm : Form
 
             AppendLog($"{DateTime.Now:HH:mm:ss} WebApi SQL counts -> competitors: {counts.Competitors}, clubs: {counts.Clubs}, classes: {counts.Classes}");
         }
+        catch (OperationCanceledException)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Peek in WebApi cancelled by user.");
+        }
         finally
         {
-            btnPeekWebApi.Enabled = true;
+            EndCancelableCommand();
             UpdateStatusLabel("Idle");
         }
+    }
+
+    private async void btnPeekWebApi_Click(object sender, EventArgs e)
+    {
+        await RunPeekWebApiAsync(userInitiated: true);
+    }
+
+    private async Task RunPullPastUpdatesAsync(int minutes)
+    {
+        if (!TryBeginCancelableCommand("Pull Past Updates")) return;
+        var cts = _cancelSyncCts;
+        if (cts is null) return;
+        var changedSinceUtc = DateTimeOffset.UtcNow.AddMinutes(-minutes);
+        UpdateStatusLabel($"Pulling past {minutes} min...");
+        try
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Pull Past Updates initiated for last {minutes} minute(s).");
+            await Task.Run(() => _syncService.PullUpdatesSinceAsync(changedSinceUtc, cts.Token), cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Pull Past Updates cancelled by user.");
+        }
+        finally
+        {
+            EndCancelableCommand();
+            UpdateStatusLabel("Idle");
+        }
+    }
+
+    private async void btnPullPast_Click(object sender, EventArgs e)
+    {
+        using var dlg = new PullPastDialog();
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        await RunPullPastUpdatesAsync(dlg.SelectedMinutes);
+    }
+
+    private void btnCancelSync_Click(object sender, EventArgs e)
+    {
+        if (_cancelSyncCts is null || _cancelSyncCts.IsCancellationRequested) return;
+        if (string.Equals(_runningCommandName, "Auto-sync", StringComparison.Ordinal))
+            _syncService.CancelAutoSync();
+        else
+            _cancelSyncCts.Cancel();
+        btnCancelSync.Enabled = false;
+        AppendLog($"{DateTime.Now:HH:mm:ss} Cancel requested for {_runningCommandName ?? "current command"}...");
+    }
+
+    private void SyncService_AutoSyncStarted()
+    {
+        if (InvokeRequired) { Invoke(SyncService_AutoSyncStarted); return; }
+        if (_cancelSyncCts is not null) return;
+        _runningCommandName = "Auto-sync";
+        _cancelSyncCts = new CancellationTokenSource();
+        btnCancelSync.Enabled = true;
+        btnSyncNow.Enabled = false;
+        btnForcePush.Enabled = false;
+        btnPushClubs.Enabled = false;
+        btnPeekWebApi.Enabled = false;
+        btnPullPast.Enabled = false;
+        StartRunningStatus("Auto-sync");
+        AppendLog($"{DateTime.Now:HH:mm:ss} Auto-sync started.");
+    }
+
+    private void SyncService_AutoSyncFinished()
+    {
+        if (InvokeRequired) { Invoke(SyncService_AutoSyncFinished); return; }
+        if (!string.Equals(_runningCommandName, "Auto-sync", StringComparison.Ordinal)) return;
+        _cancelSyncCts?.Dispose();
+        _cancelSyncCts = null;
+        _runningCommandName = null;
+        btnCancelSync.Enabled = false;
+        btnSyncNow.Enabled = true;
+        btnForcePush.Enabled = true;
+        btnPushClubs.Enabled = true;
+        btnPeekWebApi.Enabled = true;
+        btnPullPast.Enabled = true;
+        StopRunningStatus();
+        UpdateStatusLabel("Idle");
     }
 
     private void chkAutoSync_CheckedChanged(object sender, EventArgs e)

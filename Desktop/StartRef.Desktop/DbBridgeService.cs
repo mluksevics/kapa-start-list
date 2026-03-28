@@ -26,6 +26,10 @@ public record EtapInfo(string Name, string Date, int Nullzeit)
 /// </summary>
 public class DbBridgeService : IDisposable
 {
+    private const int DefaultDbCodePage = 1257;
+    private static readonly object EncodingLock = new();
+    private static Encoding _dbEncoding = CreateEncoding(DefaultDbCodePage);
+
     private IntPtr _ctx = IntPtr.Zero;
     private string _dataDir = string.Empty;
     private readonly Action<string>? _log;
@@ -50,6 +54,14 @@ public class DbBridgeService : IDisposable
         _log = log;
     }
 
+    public static void SetCodePage(int codePage)
+    {
+        lock (EncodingLock)
+        {
+            _dbEncoding = CreateEncoding(codePage);
+        }
+    }
+
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
     /// <summary>Opens the DBISAM database at <paramref name="dataDir"/>. Returns true on success.</summary>
@@ -59,7 +71,7 @@ public class DbBridgeService : IDisposable
         _dataDir = dataDir;
         try
         {
-            _ctx = DbBridgeNative.DbOpen(dataDir);
+            _ctx = DbBridgeNative.DbOpenRaw(EncodeString(dataDir));
             if (_ctx == IntPtr.Zero)
             {
                 _log?.Invoke("DbOpen returned NULL — check path and DLL dependencies.");
@@ -97,7 +109,7 @@ public class DbBridgeService : IDisposable
         try
         {
             DbBridgeNative.DbClose(_ctx);
-            _log?.Invoke("DB closed.");
+            _log?.Invoke("DB connection closed (normal cleanup).");
         }
         catch (Exception ex)
         {
@@ -116,10 +128,47 @@ public class DbBridgeService : IDisposable
     private string GetLastError()
     {
         if (!IsOpen) return string.Empty;
-        var sb = new StringBuilder(1024);
-        try { DbBridgeNative.DbGetLastError(_ctx, sb, sb.Capacity); }
+        var buffer = new byte[1024];
+        try { DbBridgeNative.DbGetLastError(_ctx, buffer, buffer.Length); }
         catch { /* ignore */ }
-        return sb.ToString();
+        return DecodeBuffer(buffer);
+    }
+
+    private static Encoding CreateEncoding(int codePage)
+    {
+        try
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            return Encoding.GetEncoding(codePage);
+        }
+        catch
+        {
+            return Encoding.UTF8;
+        }
+    }
+
+    private static string DecodeBuffer(byte[] buffer)
+    {
+        int len = Array.IndexOf(buffer, (byte)0);
+        if (len < 0) len = buffer.Length;
+        lock (EncodingLock)
+        {
+            return _dbEncoding.GetString(buffer, 0, len);
+        }
+    }
+
+    private static byte[] EncodeString(string value)
+    {
+        var source = value ?? string.Empty;
+        byte[] encoded;
+        lock (EncodingLock)
+        {
+            encoded = _dbEncoding.GetBytes(source);
+        }
+
+        var buffer = new byte[encoded.Length + 1];
+        Array.Copy(encoded, buffer, encoded.Length);
+        return buffer;
     }
 
     private DbBridgeResult Ok(string message) => new(true, DbBridgeNative.DBR_OK, message);
@@ -156,12 +205,12 @@ public class DbBridgeService : IDisposable
     public (DbBridgeResult Result, EtapInfo? Info) GetEtapInfo(int dayNo)
     {
         if (!IsOpen) return (NotOpen(), null);
-        var nameBuf = new StringBuilder(256);
-        var dateBuf = new StringBuilder(256);
+        var nameBuf = new byte[256];
+        var dateBuf = new byte[256];
         int code = DbBridgeNative.DbGetEtapInfo(_ctx, dayNo, nameBuf, 255, dateBuf, 255, out int nullzeit);
         var result = Wrap(code, "OK");
         if (!result.Success) return (result, null);
-        return (result, new EtapInfo(nameBuf.ToString(), dateBuf.ToString(), nullzeit));
+        return (result, new EtapInfo(DecodeBuffer(nameBuf), DecodeBuffer(dateBuf), nullzeit));
     }
 
     // ── Test mode ────────────────────────────────────────────────────────────
@@ -177,28 +226,28 @@ public class DbBridgeService : IDisposable
     public (DbBridgeResult Result, string? Raw) GetTeilnInfoByIdNr(int idNr)
     {
         if (!IsOpen) return (NotOpen(), null);
-        var buf = new StringBuilder(4096);
-        int code = DbBridgeNative.DbGetTeilnInfoByIdNr(_ctx, idNr, buf, buf.Capacity);
+        var buf = new byte[4096];
+        int code = DbBridgeNative.DbGetTeilnInfoByIdNr(_ctx, idNr, buf, buf.Length);
         var result = Wrap(code, "OK");
-        return (result, result.Success ? buf.ToString() : null);
+        return (result, result.Success ? DecodeBuffer(buf) : null);
     }
 
     public (DbBridgeResult Result, string? Raw) GetIdNrListByStartNr(int startNr)
     {
         if (!IsOpen) return (NotOpen(), null);
-        var buf = new StringBuilder(4096);
-        int code = DbBridgeNative.DbGetIdNrListByStartNr(_ctx, startNr, buf, buf.Capacity);
+        var buf = new byte[4096];
+        int code = DbBridgeNative.DbGetIdNrListByStartNr(_ctx, startNr, buf, buf.Length);
         var result = Wrap(code, "OK");
-        return (result, result.Success ? buf.ToString() : null);
+        return (result, result.Success ? DecodeBuffer(buf) : null);
     }
 
     public (DbBridgeResult Result, string? Raw) GetIdNrListByChipNr(int dayNo, int chipNr)
     {
         if (!IsOpen) return (NotOpen(), null);
-        var buf = new StringBuilder(4096);
-        int code = DbBridgeNative.DbGetIdNrListByChipNr(_ctx, dayNo, chipNr, buf, buf.Capacity);
+        var buf = new byte[4096];
+        int code = DbBridgeNative.DbGetIdNrListByChipNr(_ctx, dayNo, chipNr, buf, buf.Length);
         var result = Wrap(code, "OK");
-        return (result, result.Success ? buf.ToString() : null);
+        return (result, result.Success ? DecodeBuffer(buf) : null);
     }
 
     // ── Change StartTime ─────────────────────────────────────────────────────
@@ -238,7 +287,7 @@ public class DbBridgeService : IDisposable
 
     /// <summary>Updates the Name field in the given table (e.g. "Teiln") by IdNr.</summary>
     public DbBridgeResult UpdateName(string tableName, int idNr, string newName) =>
-        IsOpen ? Wrap(DbBridgeNative.DbUpdateName(_ctx, tableName, idNr, newName), "Name updated") : NotOpen();
+        IsOpen ? Wrap(DbBridgeNative.DbUpdateNameRaw(_ctx, EncodeString(tableName), idNr, EncodeString(newName)), "Name updated") : NotOpen();
 
     // ── Buffer parsing helpers ────────────────────────────────────────────────
 

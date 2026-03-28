@@ -21,6 +21,11 @@ public class SyncService
     private readonly Action<string> _log;
 
     private System.Windows.Forms.Timer? _timer;
+    private CancellationTokenSource? _autoSyncCts;
+    private int _autoSyncInProgress;
+
+    public event Action? AutoSyncStarted;
+    public event Action? AutoSyncFinished;
 
     public SyncService(
         ApiClient api,
@@ -45,12 +50,19 @@ public class SyncService
         _timer.Tick += async (_, _) =>
         {
             if (_getSettings().AutoSyncEnabled)
-                await RunCycleAsync(forcePush: false);
+                _ = Task.Run(RunAutoSyncTickAsync);
+            await Task.CompletedTask;
         };
         _timer.Start();
     }
 
     public void Stop() => _timer?.Stop();
+
+    public void CancelAutoSync()
+    {
+        if (_autoSyncCts is null || _autoSyncCts.IsCancellationRequested) return;
+        _autoSyncCts.Cancel();
+    }
 
     public void UpdateInterval(int seconds)
     {
@@ -58,9 +70,36 @@ public class SyncService
         _timer.Interval = seconds * 1000;
     }
 
-    /// <summary>Runs one sync cycle: PULL from API → write ChipNr changes to DBISAM.</summary>
-    public async Task RunCycleAsync(bool forcePush)
+    public async Task ForcePushAllAsync(CancellationToken ct = default)
     {
+        var settings = _getSettings();
+        var today = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
+        await UploadForcePushAsync(settings, today, ct);
+    }
+
+    public async Task<int> PullUpdatesSinceAsync(DateTimeOffset changedSinceUtc, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var settings = _getSettings();
+        var today = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
+        _log($"{Ts()} Pulling from API since {changedSinceUtc:O}...");
+
+        var pullResult = await _api.GetRunnersAsync(today, changedSinceUtc, ct);
+        if (pullResult is null)
+        {
+            _log($"{Ts()} PULL (since) failed — API unreachable.");
+            return -1;
+        }
+
+        await Task.Run(() => ApplyPulledUpdatesToDbIsam(settings, pullResult.Runners, ct), ct);
+        _log($"{Ts()} Pull (since): pulled {pullResult.Runners.Count} runner(s).");
+        return pullResult.Runners.Count;
+    }
+
+    /// <summary>Runs one sync cycle: PULL from API → write ChipNr changes to DBISAM.</summary>
+    public async Task RunCycleAsync(bool forcePush, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
         var settings = _getSettings();
         var today = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
 
@@ -70,122 +109,18 @@ public class SyncService
             ? null
             : settings.LastServerTimeUtc;
 
-        var pullResult = await _api.GetRunnersAsync(today, changedSince);
+        var pullResult = await _api.GetRunnersAsync(today, changedSince, ct);
         if (pullResult is null)
         {
             _log($"{Ts()} PULL failed — API unreachable.");
             return;
         }
 
-        // Log field-device status changes
-        foreach (var r in pullResult.Runners)
-        {
-            if (r.StatusId != 1)
-                _log($"{Ts()} PULL #{r.StartNumber} {r.Name} {r.Surname} – Status={r.StatusName} (by: {r.LastModifiedBy})");
-        }
-
-        // 2. Write ChipNr changes to DBISAM (runners modified by field devices, not desktop)
-        var chipUpdates = pullResult.Runners
-            .Where(r => !string.IsNullOrEmpty(r.SiChipNo) &&
-                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        if (chipUpdates.Count > 0 && !string.IsNullOrEmpty(settings.DbIsamPath))
-        {
-            using var db = new DbBridgeService(_log);
-            if (db.Open(settings.DbIsamPath))
-            {
-                foreach (var r in chipUpdates)
-                {
-                    if (!int.TryParse(r.SiChipNo, out int chipNr)) continue;
-                    var res = db.ChangeChipNrByStartNr(settings.DayNo, chipNr, r.StartNumber);
-                    _log($"{Ts()} DBISAM ChipNr #{r.StartNumber} → {chipNr}: {(res.Success ? "OK" : $"ERROR {res.Message}")}");
-                }
-            }
-            else
-            {
-                _log($"{Ts()} DBISAM not available — ChipNr writes skipped. Check DB path and DbBridge.dll.");
-            }
-        }
-
-        // 3. Write KatNr changes to DBISAM (runners modified by field devices, not desktop)
-        var katUpdates = pullResult.Runners
-            .Where(r => r.ClassId > 0 &&
-                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        if (katUpdates.Count > 0 && !string.IsNullOrEmpty(settings.DbIsamPath))
-        {
-            using var db = new DbBridgeService(_log);
-            if (db.Open(settings.DbIsamPath))
-            {
-                foreach (var r in katUpdates)
-                {
-                    var res = db.ChangeKatNrByStartNr(r.ClassId, r.StartNumber);
-                    if (!res.Success)
-                        _log($"{Ts()} DBISAM KatNr #{r.StartNumber} → {r.ClassId}: ERROR {res.Message}");
-                }
-            }
-            else
-            {
-                _log($"{Ts()} DBISAM not available — KatNr writes skipped. Check DB path and DbBridge.dll.");
-            }
-        }
-
-        // 4. Write StartTime changes to DBISAM (runners modified by field devices, not desktop)
-        var startTimeUpdates = pullResult.Runners
-            .Where(r => r.StartTime != null &&
-                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        if (startTimeUpdates.Count > 0 && !string.IsNullOrEmpty(settings.DbIsamPath))
-        {
-            using var db = new DbBridgeService(_log);
-            if (db.Open(settings.DbIsamPath))
-            {
-                foreach (var r in startTimeUpdates)
-                {
-                    var res = db.ChangeStartTimeByStartNr(settings.DayNo, r.StartTime!, r.StartNumber);
-                    if (!res.Success)
-                        _log($"{Ts()} DBISAM StartTime #{r.StartNumber} → {r.StartTime}: ERROR {res.Message}");
-                }
-            }
-            else
-            {
-                _log($"{Ts()} DBISAM not available — StartTime writes skipped. Check DB path and DbBridge.dll.");
-            }
-        }
-
-        // 5. DNS write — not yet supported by DLL
-        int dnsCount = pullResult.Runners.Count(r => r.StatusId == 3);
-        if (dnsCount > 0)
-            _log($"{Ts()} [WARN] {dnsCount} DNS runner(s) NOT written to DBISAM — DLL lacks DbChangeDnsByStartNr.");
+        await Task.Run(() => ApplyPulledUpdatesToDbIsam(settings, pullResult.Runners, ct), ct);
 
         // 6. Bulk push
         if (forcePush)
-        {
-            _log($"{Ts()} Force Push: scanning DBISAM 1–4000 (workaround — ask Delphi dev for DbReadAllTeiln).");
-
-            var runners = ScanRunnersByStartNr(settings);
-            if (runners.Count == 0)
-            {
-                _log($"{Ts()} Force Push: no runners found in scan — check DB path.");
-            }
-            else
-            {
-                var request = new BulkUploadRequest
-                {
-                    Source = settings.DeviceName,
-                    LastModifiedUtc = DateTimeOffset.UtcNow,
-                    Runners = runners
-                };
-                var pushResult = await _api.BulkUploadAsync(today, request);
-                if (pushResult is null)
-                    _log($"{Ts()} Force Push: upload failed — API unreachable.");
-                else
-                    _log($"{Ts()} Force Push: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged}");
-            }
-        }
+            await UploadForcePushAsync(settings, today, ct);
         else if (pullResult.Runners.Count == 0)
             _log($"{Ts()} Sync: no changes from API.");
         else
@@ -203,7 +138,7 @@ public class SyncService
     /// ChipNr1..3, KatNr, Start1Raw, Start1, Start2Raw, Start2, Start3Raw, Start3, MldKen1..3, Rent).
     /// Replace with DbReadAllTeiln when the Delphi developer adds that bulk-read function.
     /// </summary>
-    private List<BulkRunnerDto> ScanRunnersByStartNr(AppSettings settings)
+    private List<BulkRunnerDto> ScanRunnersByStartNr(AppSettings settings, CancellationToken ct = default)
     {
         const int maxStartNr = 4000;
         var results = new List<BulkRunnerDto>();
@@ -225,6 +160,7 @@ public class SyncService
 
         for (int startNr = 1; startNr <= maxStartNr; startNr++)
         {
+            ct.ThrowIfCancellationRequested();
             try
             {
                 var (listResult, listRaw) = db.GetIdNrListByStartNr(startNr);
@@ -259,6 +195,10 @@ public class SyncService
 
                 results.Add(dto);
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _log($"{Ts()} Scan startNr={startNr} failed: {ex.Message}");
@@ -283,47 +223,34 @@ public class SyncService
         return null;
     }
 
-    public async Task<UpsertLookupResponse?> PushClassesAsync()
+    private async Task UploadForcePushAsync(AppSettings settings, string date, CancellationToken ct = default)
     {
-        var settings = _getSettings();
-        var runners = ScanRunnersByStartNr(settings);
-        var classes = runners
-            .Where(r => r.ClassId > 0 && !string.IsNullOrWhiteSpace(r.ClassName))
-            .GroupBy(r => r.ClassId)
-            .Select(g => new LookupItemDto
-            {
-                Id = g.Key,
-                Name = g.First().ClassName.Trim()
-            })
-            .Where(x => x.Name.Length > 0)
-            .OrderBy(x => x.Id)
-            .ToList();
+        _log($"{Ts()} Force Push: scanning DBISAM 1–4000 (workaround — ask Delphi dev for DbReadAllTeiln).");
 
-        if (classes.Count == 0)
+        var runners = await Task.Run(() => ScanRunnersByStartNr(settings, ct), ct);
+        if (runners.Count == 0)
         {
-            _log($"{Ts()} Push Classes: nothing to push.");
-            return new UpsertLookupResponse();
+            _log($"{Ts()} Force Push: no runners found in scan — check DB path.");
+            return;
         }
 
-        var response = await _api.UpsertClassesAsync(new UpsertLookupRequest
+        var request = new BulkUploadRequest
         {
             Source = settings.DeviceName,
             LastModifiedUtc = DateTimeOffset.UtcNow,
-            Items = classes
-        });
-
-        if (response is null)
-            _log($"{Ts()} Push Classes: upload failed — API unreachable.");
+            Runners = runners
+        };
+        var pushResult = await _api.BulkUploadAsync(date, request, ct);
+        if (pushResult is null)
+            _log($"{Ts()} Force Push: upload failed — API unreachable.");
         else
-            _log($"{Ts()} Push Classes: inserted={response.Inserted} updated={response.Updated} unchanged={response.Unchanged}");
-
-        return response;
+            _log($"{Ts()} Force Push: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged}");
     }
 
-    public async Task<UpsertLookupResponse?> PushClubsAsync()
+    public async Task<UpsertLookupResponse?> PushClubsAsync(CancellationToken ct = default)
     {
         var settings = _getSettings();
-        var runners = ScanRunnersByStartNr(settings);
+        var runners = await Task.Run(() => ScanRunnersByStartNr(settings, ct), ct);
         var clubs = runners
             .Where(r => r.ClubId > 0 && !string.IsNullOrWhiteSpace(r.ClubName))
             .GroupBy(r => r.ClubId)
@@ -347,7 +274,7 @@ public class SyncService
             Source = settings.DeviceName,
             LastModifiedUtc = DateTimeOffset.UtcNow,
             Items = clubs
-        });
+        }, ct);
 
         if (response is null)
             _log($"{Ts()} Push Clubs: upload failed — API unreachable.");
@@ -358,4 +285,117 @@ public class SyncService
     }
 
     private static string Ts() => DateTime.Now.ToString("HH:mm:ss");
+
+    private void ApplyPulledUpdatesToDbIsam(AppSettings settings, List<RunnerDto> pulledRunners, CancellationToken ct)
+    {
+        // Log field-device status changes
+        foreach (var r in pulledRunners)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (r.StatusId != 1)
+                _log($"{Ts()} PULL #{r.StartNumber} {r.Name} {r.Surname} – Status={r.StatusName} (by: {r.LastModifiedBy})");
+        }
+
+        // Write ChipNr changes to DBISAM (runners modified by field devices, not desktop)
+        var chipUpdates = pulledRunners
+            .Where(r => !string.IsNullOrEmpty(r.SiChipNo) &&
+                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (chipUpdates.Count > 0 && !string.IsNullOrEmpty(settings.DbIsamPath))
+        {
+            using var db = new DbBridgeService(_log);
+            if (db.Open(settings.DbIsamPath))
+            {
+                foreach (var r in chipUpdates)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (!int.TryParse(r.SiChipNo, out int chipNr)) continue;
+                    var res = db.ChangeChipNrByStartNr(settings.DayNo, chipNr, r.StartNumber);
+                    _log($"{Ts()} DBISAM ChipNr #{r.StartNumber} → {chipNr}: {(res.Success ? "OK" : $"ERROR {res.Message}")}");
+                }
+            }
+            else
+            {
+                _log($"{Ts()} DBISAM not available — ChipNr writes skipped. Check DB path and DbBridge.dll.");
+            }
+        }
+
+        // Write KatNr changes to DBISAM (runners modified by field devices, not desktop)
+        var katUpdates = pulledRunners
+            .Where(r => r.ClassId > 0 &&
+                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (katUpdates.Count > 0 && !string.IsNullOrEmpty(settings.DbIsamPath))
+        {
+            using var db = new DbBridgeService(_log);
+            if (db.Open(settings.DbIsamPath))
+            {
+                foreach (var r in katUpdates)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var res = db.ChangeKatNrByStartNr(r.ClassId, r.StartNumber);
+                    if (!res.Success)
+                        _log($"{Ts()} DBISAM KatNr #{r.StartNumber} → {r.ClassId}: ERROR {res.Message}");
+                }
+            }
+            else
+            {
+                _log($"{Ts()} DBISAM not available — KatNr writes skipped. Check DB path and DbBridge.dll.");
+            }
+        }
+
+        // Write StartTime changes to DBISAM (runners modified by field devices, not desktop)
+        var startTimeUpdates = pulledRunners
+            .Where(r => r.StartTime != null &&
+                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (startTimeUpdates.Count > 0 && !string.IsNullOrEmpty(settings.DbIsamPath))
+        {
+            using var db = new DbBridgeService(_log);
+            if (db.Open(settings.DbIsamPath))
+            {
+                foreach (var r in startTimeUpdates)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var res = db.ChangeStartTimeByStartNr(settings.DayNo, r.StartTime!, r.StartNumber);
+                    if (!res.Success)
+                        _log($"{Ts()} DBISAM StartTime #{r.StartNumber} → {r.StartTime}: ERROR {res.Message}");
+                }
+            }
+            else
+            {
+                _log($"{Ts()} DBISAM not available — StartTime writes skipped. Check DB path and DbBridge.dll.");
+            }
+        }
+
+        // DNS write — not yet supported by DLL
+        int dnsCount = pulledRunners.Count(r => r.StatusId == 3);
+        if (dnsCount > 0)
+            _log($"{Ts()} [WARN] {dnsCount} DNS runner(s) NOT written to DBISAM — DLL lacks DbChangeDnsByStartNr.");
+    }
+
+    private async Task RunAutoSyncTickAsync()
+    {
+        if (Interlocked.CompareExchange(ref _autoSyncInProgress, 1, 0) != 0) return;
+        _autoSyncCts = new CancellationTokenSource();
+        AutoSyncStarted?.Invoke();
+        try
+        {
+            await RunCycleAsync(forcePush: false, _autoSyncCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            _log($"{Ts()} Auto-sync cancelled.");
+        }
+        finally
+        {
+            _autoSyncCts.Dispose();
+            _autoSyncCts = null;
+            Interlocked.Exchange(ref _autoSyncInProgress, 0);
+            AutoSyncFinished?.Invoke();
+        }
+    }
 }

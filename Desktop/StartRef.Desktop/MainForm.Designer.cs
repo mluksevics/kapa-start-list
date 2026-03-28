@@ -17,7 +17,7 @@ partial class MainForm
     private NumericUpDown nudInterval;
     private Label lblIntervalUnit;
     private Label lblLastSyncCaption, lblLastSync;
-    private Button btnSyncNow, btnForcePush, btnPushClubs, btnPushClasses, btnDbExplorer, btnPeekWebApi;
+    private Button btnSyncNow, btnForcePush, btnPushClubs, btnPullPast, btnDbExplorer, btnPeekWebApi, btnCancelSync;
     private Label lblStatus;
     private TextBox txtLog;
     private Label lblLogCaption;
@@ -143,19 +143,19 @@ partial class MainForm
         };
         btnPushClubs.Click += btnPushClubs_Click;
 
-        btnPushClasses = new Button
+        btnPullPast = new Button
         {
-            Text = "Push Classes",
+            Text = "Pull Past",
             Location = new System.Drawing.Point(390, y),
             Size = new System.Drawing.Size(110, 30)
         };
-        btnPushClasses.Click += btnPushClasses_Click;
+        btnPullPast.Click += btnPullPast_Click;
 
         btnDbExplorer = new Button
         {
-            Text = "DbBridge Explorer",
-            Location = new System.Drawing.Point(510, y),
-            Size = new System.Drawing.Size(140, 30)
+            Text = "E",
+            Location = new System.Drawing.Point(620, y),
+            Size = new System.Drawing.Size(30, 30)
         };
         btnDbExplorer.Click += btnDbExplorer_Click;
 
@@ -167,8 +167,17 @@ partial class MainForm
         };
         btnPeekWebApi.Click += btnPeekWebApi_Click;
 
-        y += 34;
-        lblStatus = MakeLabel("Status: Idle", 10, y, 180);
+        btnCancelSync = new Button
+        {
+            Text = "Cancel",
+            Location = new System.Drawing.Point(10, y + 34),
+            Size = new System.Drawing.Size(110, 30),
+            Enabled = false
+        };
+        btnCancelSync.Click += btnCancelSync_Click;
+
+        y += 38;
+        lblStatus = MakeLabel("Status: Idle", 130, y, 260);
         y += 28;
 
         // ── Log ───────────────────────────────────────────────────────────────
@@ -193,7 +202,7 @@ partial class MainForm
             chkAutoSync, lblIntervalCaption, nudInterval, lblIntervalUnit,
             lblLastSyncCaption, lblLastSync,
             sep,
-            btnSyncNow, btnForcePush, btnPushClubs, btnPushClasses, btnDbExplorer, btnPeekWebApi, lblStatus,
+            btnSyncNow, btnForcePush, btnPushClubs, btnPullPast, btnDbExplorer, btnPeekWebApi, btnCancelSync, lblStatus,
             lblLogCaption, txtLog
         });
     }

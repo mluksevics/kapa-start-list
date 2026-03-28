@@ -30,7 +30,11 @@ Each cycle (auto or manual) runs these four steps in order:
 | Button | Behaviour |
 |--------|-----------|
 | **Sync Now** | Runs one full cycle immediately (same as auto-sync) |
-| **Force Push All** | Sends `lastModifiedUtc = now`, so all non-status fields overwrite the server. Use after correcting data in OE12. Status rules still apply. |
+| **Force Push All** | Runs regular sync first, then sends `lastModifiedUtc = now`, so all non-status fields overwrite the server. Use after correcting data in OE12. Status rules still apply. |
+| **Push Clubs** | Reads clubs from DBISAM and upserts them to API lookup table. |
+| **Peek in WebApi** | Reads current API SQL counts (competitors/clubs/classes) and logs them. |
+
+At app startup, **Peek in WebApi** is triggered automatically once.
 
 ---
 

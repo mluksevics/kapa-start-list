@@ -11,6 +11,7 @@ public class AppSettings
     public bool AutoSyncEnabled { get; set; } = true;
     public string DeviceName { get; set; } = "desktop";
     public int DayNo { get; set; } = 1;
+    public int DbCodePage { get; set; } = 1257;
     public DateTimeOffset LastServerTimeUtc { get; set; } = DateTimeOffset.MinValue;
 
     private static readonly string SettingsPath =

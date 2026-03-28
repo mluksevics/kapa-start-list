@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace StartRef.Desktop;
 
@@ -22,12 +21,14 @@ internal static class DbBridgeNative
 
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
     public static extern IntPtr DbOpen(string dataDir);
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, EntryPoint = "DbOpen")]
+    public static extern IntPtr DbOpenRaw(byte[] dataDir);
 
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
     public static extern void DbClose(IntPtr ctxHandle);
 
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-    public static extern int DbGetLastError(IntPtr ctxHandle, StringBuilder buffer, int bufferSize);
+    public static extern int DbGetLastError(IntPtr ctxHandle, byte[] buffer, int bufferSize);
 
     // ── Etap / Config ────────────────────────────────────────────────────────
 
@@ -35,9 +36,9 @@ internal static class DbBridgeNative
     public static extern int DbGetEtapInfo(
         IntPtr ctxHandle,
         int dayNo,
-        StringBuilder nameBuf,
+        byte[] nameBuf,
         int nameSize,
-        StringBuilder dateBuf,
+        byte[] dateBuf,
         int dateSize,
         out int nullzeit);
 
@@ -52,13 +53,13 @@ internal static class DbBridgeNative
     // ── Read ─────────────────────────────────────────────────────────────────
 
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-    public static extern int DbGetTeilnInfoByIdNr(IntPtr ctxHandle, int idNr, StringBuilder buffer, int bufferSize);
+    public static extern int DbGetTeilnInfoByIdNr(IntPtr ctxHandle, int idNr, byte[] buffer, int bufferSize);
 
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-    public static extern int DbGetIdNrListByStartNr(IntPtr ctxHandle, int startNr, StringBuilder buffer, int bufferSize);
+    public static extern int DbGetIdNrListByStartNr(IntPtr ctxHandle, int startNr, byte[] buffer, int bufferSize);
 
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-    public static extern int DbGetIdNrListByChipNr(IntPtr ctxHandle, int dayNo, int chipNr, StringBuilder buffer, int bufferSize);
+    public static extern int DbGetIdNrListByChipNr(IntPtr ctxHandle, int dayNo, int chipNr, byte[] buffer, int bufferSize);
 
     // ── Change StartTime ─────────────────────────────────────────────────────
 
@@ -98,4 +99,6 @@ internal static class DbBridgeNative
     /// <summary>Updates the Name field of a record in the given table by IdNr (e.g. tableName="Teiln").</summary>
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
     public static extern int DbUpdateName(IntPtr ctxHandle, string tableName, int idNr, string newName);
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, EntryPoint = "DbUpdateName")]
+    public static extern int DbUpdateNameRaw(IntPtr ctxHandle, byte[] tableName, int idNr, byte[] newName);
 }

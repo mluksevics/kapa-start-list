@@ -15,8 +15,9 @@ partial class DbBridgeExplorerForm
     {
         components = new System.ComponentModel.Container();
         Text = "DbBridge Explorer";
-        Size = new System.Drawing.Size(870, 900);
-        MinimumSize = new System.Drawing.Size(800, 700);
+        Size = new System.Drawing.Size(980, 980);
+        MinimumSize = new System.Drawing.Size(940, 900);
+        AutoScroll = true;
         StartPosition = FormStartPosition.CenterParent;
         Font = new System.Drawing.Font("Segoe UI", 9f);
 
@@ -90,13 +91,9 @@ partial class DbBridgeExplorerForm
         AddSep(y); y += 8;
         AddSectionLabel("Read", 10, y); y += 24;
 
-        AddButton("Get Etap Info", 10, y, 130, BtnGetEtapInfo_Click);
-        y += rowH;
         AddButton("Get Teiln Info by IdNr", 10, y, 180, BtnGetTeilnInfo_Click);
-        y += rowH;
-        AddButton("Get IdNr List by StartNr", 10, y, 195, BtnGetIdNrByStartNr_Click);
-        y += rowH;
-        AddButton("Get IdNr List by ChipNr", 10, y, 195, BtnGetIdNrByChipNr_Click);
+        AddButton("Get IdNr List by StartNr", 200, y, 195, BtnGetIdNrByStartNr_Click);
+        AddButton("Get IdNr List by ChipNr", 405, y, 195, BtnGetIdNrByChipNr_Click);
         y += rowH + 5;
 
         // ── Write: StartTime ──────────────────────────────────────────────────
@@ -145,18 +142,20 @@ partial class DbBridgeExplorerForm
         AddSep(y); y += 8;
         AddSectionLabel("Output", 10, y); y += 24;
 
+        var outputTop = y;
+        var outputHeight = Math.Max(170, ClientSize.Height - outputTop - 65);
         _txtLog = new TextBox
         {
             Multiline = true,
             ReadOnly = true,
             ScrollBars = ScrollBars.Vertical,
             Font = new System.Drawing.Font("Consolas", 8.5f),
-            Location = new System.Drawing.Point(10, y),
-            Size = new System.Drawing.Size(830, 170),
+            Location = new System.Drawing.Point(10, outputTop),
+            Size = new System.Drawing.Size(830, outputHeight),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom
         };
         Controls.Add(_txtLog);
-        y += 178;
+        y = outputTop + outputHeight + 8;
 
         _btnClearLog = AddButton("Clear Log", 10, y, 90, BtnClearLog_Click);
     }
