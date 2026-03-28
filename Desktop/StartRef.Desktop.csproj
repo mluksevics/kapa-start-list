@@ -26,9 +26,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\..\DbBridge\DbBridgeWin32CSharp\bin\Debug\net48\DbBridge.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    <Content Include="Library\DbBridge.dll">
       <Link>DbBridge.dll</Link>
+      <TargetPath>DbBridge.dll</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
 

@@ -20,22 +20,26 @@ Real-time start-list management for orienteering events. Three components talk t
  OE12 (event software)
       │ writes
       ▼
-  DBISAM DB ◄──── DNS written back ────────────────────────┐
-      │                                                      │
-      │ read                                                 │
-      ▼                                                      │
+  DBISAM DB ◄── ChipNr/KatNr/StartTime written back ──────────┐
+      │                                                         │
+      │ scanned (Force Push)                                    │
+      ▼                                                         │
  Desktop App ──── PUT /runners (bulk) ──► .NET API ◄──── PATCH /runners ──── Android (referee)
-                                          (Azure SQL)         ▲
-                                              │               │
-                                  GET /runners?changedSince ──┘
-                                          Android (gate, ~30s poll)
+                                          (Azure SQL)          ▲
+                                              │                │
+                                  GET /runners?changedSince ───┘
+                                          Android / Desktop (~30–60s poll)
 ```
 
-**Sync flow (Desktop, every ~60 s):**
-1. PULL from API — get latest statuses from field devices
-2. Write DNS statuses to DBISAM (so OE12 sees them)
-3. Read full start list from DBISAM
-4. Push to API (bulk upsert)
+**Sync flow (Desktop, regular cycle, every ~60 s):**
+1. PULL from API (`GET /runners?changedSince={watermark}`) — receive changes from field devices
+2. Write ChipNr, KatNr, and StartTime changes back to DBISAM via DbBridge DLL
+3. Save server timestamp as watermark for the next delta
+
+**Force Push All (Desktop, on demand):**
+1. Regular sync cycle first
+2. Scan all runners from DBISAM (start numbers 1–4000)
+3. Bulk-upload to API (`PUT /runners`) — overwrites non-status fields; status never downgrades
 
 **Sync flow (Android, every ~30 s):**
 - Delta poll: `GET /runners?changedSince={watermark}`
@@ -55,11 +59,15 @@ Real-time start-list management for orienteering events. Three components talk t
 |----|------|--------|
 | 1 | Registered | Default |
 | 2 | Started | Android gate (SI chip read) |
-| 3 | DNS | Android referee, or Desktop (from OE12) |
+| 3 | DNS | Android referee |
 
 **Rule:** status can only escalate. Started and DNS are never downgraded back to Registered by any component.
 
-**`className` is immutable** after a runner's first upload. No app can change it via PATCH or subsequent bulk uploads.
+---
+
+## Lookup tables
+
+Classes and clubs are stored in separate `Classes` and `Clubs` tables. `Runner` holds only `ClassId`/`ClubId`; names are resolved at read time. The Desktop **Push Clubs** button populates the `Clubs` table from DBISAM. Class names are upserted during bulk upload.
 
 ---
 
@@ -80,6 +88,7 @@ dotnet run
 cd Desktop/StartRef.Desktop
 dotnet run
 # Enter API URL, API key, and DBISAM path in Settings
+# Place DbBridge.dll alongside the executable
 ```
 
 ### Android

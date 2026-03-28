@@ -9,7 +9,8 @@
       "Bash(find C:UsersMarcisLuksevicssourcereposPersonalKapaStartListDesktop -name *.cs)",
       "Bash(find /c/Users/MarcisLuksevics/source/repos/Personal/KapaStartList/Desktop -type f \\\\\\(-name *.pas -o -name *.dpr -o -name *.txt -o -name *.md \\\\\\))",
       "Bash(find C:UsersMarcisLuksevicssourcereposPersonalKapaStartList -name *.pas -o -name *.dpr -o -name *.dfm)",
-      "Bash(find /c/Users/MarcisLuksevics/source/repos/Personal/KapaStartList -name *.kt)"
+      "Bash(find /c/Users/MarcisLuksevics/source/repos/Personal/KapaStartList -name *.kt)",
+      "Bash(ls:*)"
     ]
   }
 }

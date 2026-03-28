@@ -141,8 +141,8 @@ public static class RunnerEndpoints
                     bool anyChange = false;
                     bool thisRunnerSkipped = false;
 
-                    // Non-status fields: apply only if incoming timestamp is >= server timestamp
-                    bool incomingIsNewer = request.LastModifiedUtc >= existing.LastModifiedUtc;
+                    // Non-status fields: per-runner timestamp wins over server timestamp.
+                    bool incomingIsNewer = dto.LastModifiedUtc >= existing.LastModifiedUtc;
 
                     if (incomingIsNewer)
                     {

@@ -13,6 +13,8 @@ sync_log.txt
 *.nupkg
 /DbBridge/
 .cursor/plans/
+Desktop/Library/DbBridge.dll
+.tmp/
 
 # ── Android ──────────────────────────────────────────────────────────────────
 *.iml

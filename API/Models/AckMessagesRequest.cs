@@ -20,7 +20,10 @@ public sealed record BulkRunnerDto(
     string? Country,
     int StatusId,
     int StartPlace,
-    string? StartTime
+    string? StartTime,
+    // Per-runner timestamp for last-write-wins. Set to scan time by desktop;
+    // TODO: use actual DBISAM row timestamp once DLL exposes it.
+    DateTimeOffset LastModifiedUtc
 );
 
 public sealed record BulkUploadResponse(
