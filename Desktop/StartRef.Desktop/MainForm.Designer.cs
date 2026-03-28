@@ -13,6 +13,7 @@ partial class MainForm
     private ComboBox cmbDay;
     private Label lblDayNote;
     private CheckBox chkAutoSync;
+    private Button btnFailureSound;
     private Label lblIntervalCaption;
     private NumericUpDown nudInterval;
     private Label lblIntervalUnit;
@@ -21,6 +22,7 @@ partial class MainForm
     private Label lblStatus;
     private TextBox txtLog;
     private Label lblLogCaption;
+    private ToolTip tipUi;
 
     protected override void Dispose(bool disposing)
     {
@@ -32,6 +34,7 @@ partial class MainForm
     private void InitializeComponent()
     {
         components = new System.ComponentModel.Container();
+        tipUi = new ToolTip(components);
         Text = "StartRef Desktop";
         Size = new System.Drawing.Size(800, 630);
         MinimumSize = new System.Drawing.Size(700, 500);
@@ -51,6 +54,14 @@ partial class MainForm
         txtApiUrl.Leave += txtApiUrl_Leave;
         btnEditApi = MakeButton("Settings", lw + margin + 460, y, 75);
         btnEditApi.Click += btnEditApi_Click;
+        btnFailureSound = new Button
+        {
+            Text = "🔊",
+            Location = new System.Drawing.Point(lw + margin + 540, y),
+            Size = new System.Drawing.Size(34, 23)
+        };
+        btnFailureSound.Click += btnFailureSound_Click;
+        tipUi.SetToolTip(btnFailureSound, "Toggle failure beep");
         y += 28;
 
         // ── DB Path ───────────────────────────────────────────────────────────
@@ -196,7 +207,7 @@ partial class MainForm
 
         Controls.AddRange(new Control[]
         {
-            lblApiUrlCaption, txtApiUrl, btnEditApi,
+            lblApiUrlCaption, txtApiUrl, btnEditApi, btnFailureSound,
             lblDbPathCaption, lblDbPath, btnBrowseDb,
             lblStageCaption, cmbDay, lblDayNote,
             chkAutoSync, lblIntervalCaption, nudInterval, lblIntervalUnit,

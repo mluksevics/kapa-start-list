@@ -9,6 +9,7 @@ public class AppSettings
     public string DbIsamPath { get; set; } = "";
     public int SyncIntervalSeconds { get; set; } = 60;
     public bool AutoSyncEnabled { get; set; } = true;
+    public bool FailureSoundEnabled { get; set; } = true;
     public string DeviceName { get; set; } = "desktop";
     public int DayNo { get; set; } = 1;
     public int DbCodePage { get; set; } = 1257;

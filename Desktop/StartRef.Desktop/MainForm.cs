@@ -50,6 +50,7 @@ public partial class MainForm : Form
         txtApiUrl.Text = _settings.ApiBaseUrl;
         lblDbPath.Text = _settings.DbIsamPath.Length > 0 ? _settings.DbIsamPath : "(not set)";
         chkAutoSync.Checked = _settings.AutoSyncEnabled;
+        btnFailureSound.Text = _settings.FailureSoundEnabled ? "🔊" : "🔇";
         nudInterval.Value = _settings.SyncIntervalSeconds;
         UpdateLastSyncLabel();
     }
@@ -145,8 +146,39 @@ public partial class MainForm : Form
         if (InvokeRequired) { Invoke(() => AppendLog(message)); return; }
         txtLog.AppendText(message + Environment.NewLine);
         txtLog.ScrollToCaret();
+        if (IsFailureMessage(message))
+            PlayFailureSound();
         UpdateLastSyncLabel();
         try { File.AppendAllText(_logFilePath, message + Environment.NewLine); } catch { }
+    }
+
+    private bool IsFailureMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return false;
+        var text = message.ToLowerInvariant();
+        if (text.Contains("cancelled")) return false;
+        return text.Contains("failed") ||
+               text.Contains("error") ||
+               text.Contains("unreachable") ||
+               text.Contains("not available");
+    }
+
+    private void PlayFailureSound()
+    {
+        if (!_settings.FailureSoundEnabled) return;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var tones = new[] { 1400, 1200, 1000, 800 };
+                foreach (var tone in tones)
+                {
+                    Console.Beep(tone, 90);
+                    Thread.Sleep(35);
+                }
+            }
+            catch { }
+        });
     }
 
     private void UpdateStatusLabel(string status)
@@ -441,6 +473,13 @@ public partial class MainForm : Form
         _settings.AutoSyncEnabled = chkAutoSync.Checked;
         _settings.Save();
         if (_settings.AutoSyncEnabled) _syncService.Start(); else _syncService.Stop();
+    }
+
+    private void btnFailureSound_Click(object sender, EventArgs e)
+    {
+        _settings.FailureSoundEnabled = !_settings.FailureSoundEnabled;
+        _settings.Save();
+        btnFailureSound.Text = _settings.FailureSoundEnabled ? "🔊" : "🔇";
     }
 
     private void nudInterval_ValueChanged(object sender, EventArgs e)
