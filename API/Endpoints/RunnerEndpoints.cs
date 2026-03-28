@@ -1,0 +1,365 @@
+using Microsoft.EntityFrameworkCore;
+using StartRef.Api.Data;
+using StartRef.Api.Data.Entities;
+using StartRef.Api.Models;
+
+namespace StartRef.Api.Endpoints;
+
+public static class RunnerEndpoints
+{
+    public static void MapRunnerEndpoints(this WebApplication app)
+    {
+        // GET /api/competitions/{date}/runners?changedSince=ISO
+        app.MapGet("/api/competitions/{date}/runners", async (
+            string date,
+            DateTimeOffset? changedSince,
+            AppDbContext db) =>
+        {
+            if (!DateOnly.TryParse(date, out var competitionDate))
+                return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
+
+            var serverTimeUtc = DateTimeOffset.UtcNow;
+
+            var query = db.Runners
+                .AsNoTracking()
+                .Include(r => r.Status)
+                .Where(r => r.CompetitionDate == competitionDate);
+
+            if (changedSince.HasValue)
+                query = query.Where(r => r.LastModifiedUtc > changedSince.Value);
+
+            var runners = await query
+                .OrderBy(r => r.StartNumber)
+                .Select(r => new RunnerResponse(
+                    r.CompetitionDate,
+                    r.StartNumber,
+                    r.SiChipNo,
+                    r.Name,
+                    r.Surname,
+                    r.ClassName,
+                    r.ClubName,
+                    r.Country,
+                    r.StatusId,
+                    r.Status.Name,
+                    r.StartPlace,
+                    r.LastModifiedUtc,
+                    r.LastModifiedBy))
+                .ToListAsync();
+
+            return Results.Ok(new GetRunnersResponse(serverTimeUtc, runners));
+        });
+
+        // PUT /api/competitions/{date}/runners — bulk upload
+        app.MapPut("/api/competitions/{date}/runners", async (
+            string date,
+            BulkUploadRequest request,
+            AppDbContext db) =>
+        {
+            if (!DateOnly.TryParse(date, out var competitionDate))
+                return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
+
+            if (request.Runners is null || request.Runners.Count == 0)
+                return Results.BadRequest(new { error = "Runners list cannot be empty." });
+
+            var utcNow = DateTimeOffset.UtcNow;
+
+            // Auto-create competition if not exists
+            var competition = await db.Competitions.FindAsync(competitionDate);
+            bool competitionCreated = false;
+            if (competition is null)
+            {
+                competition = new Competition
+                {
+                    Date = competitionDate,
+                    CreatedAtUtc = utcNow
+                };
+                db.Competitions.Add(competition);
+                competitionCreated = true;
+            }
+
+            // Load all existing runners for this date in one query
+            var existingRunners = await db.Runners
+                .Where(r => r.CompetitionDate == competitionDate)
+                .ToDictionaryAsync(r => r.StartNumber);
+
+            int inserted = 0, updated = 0, unchanged = 0, skippedAsOlder = 0;
+            var changeLogEntries = new List<ChangeLogEntry>();
+
+            foreach (var dto in request.Runners)
+            {
+                if (existingRunners.TryGetValue(dto.StartNumber, out var existing))
+                {
+                    bool anyChange = false;
+                    bool thisRunnerSkipped = false;
+
+                    // Non-status fields: apply only if incoming timestamp is >= server timestamp
+                    bool incomingIsNewer = request.LastModifiedUtc >= existing.LastModifiedUtc;
+
+                    if (incomingIsNewer)
+                    {
+                        if (existing.SiChipNo != dto.SiChipNo)
+                        {
+                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "SiChipNo", existing.SiChipNo, dto.SiChipNo, utcNow, request.Source));
+                            existing.SiChipNo = dto.SiChipNo;
+                            anyChange = true;
+                        }
+                        if (existing.Name != dto.Name)
+                        {
+                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Name", existing.Name, dto.Name, utcNow, request.Source));
+                            existing.Name = dto.Name;
+                            anyChange = true;
+                        }
+                        if (existing.Surname != dto.Surname)
+                        {
+                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Surname", existing.Surname, dto.Surname, utcNow, request.Source));
+                            existing.Surname = dto.Surname;
+                            anyChange = true;
+                        }
+                        if (existing.ClubName != dto.ClubName)
+                        {
+                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClubName", existing.ClubName, dto.ClubName, utcNow, request.Source));
+                            existing.ClubName = dto.ClubName;
+                            anyChange = true;
+                        }
+                        if (existing.Country != dto.Country)
+                        {
+                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Country", existing.Country, dto.Country, utcNow, request.Source));
+                            existing.Country = dto.Country;
+                            anyChange = true;
+                        }
+                        if (existing.StartPlace != dto.StartPlace)
+                        {
+                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StartPlace", existing.StartPlace.ToString(), dto.StartPlace.ToString(), utcNow, request.Source));
+                            existing.StartPlace = dto.StartPlace;
+                            anyChange = true;
+                        }
+                        // ClassName is immutable after initial INSERT — never updated
+                    }
+                    else
+                    {
+                        // Incoming is older — skip non-status fields
+                        thisRunnerSkipped = true;
+                    }
+
+                    // Status: apply escalation rules regardless of timestamp
+                    int resolvedStatus = ResolveStatus(incoming: dto.StatusId, current: existing.StatusId);
+                    if (resolvedStatus != existing.StatusId)
+                    {
+                        changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StatusId", existing.StatusId.ToString(), resolvedStatus.ToString(), utcNow, request.Source));
+                        existing.StatusId = resolvedStatus;
+                        anyChange = true;
+                    }
+
+                    if (anyChange)
+                    {
+                        existing.LastModifiedUtc = utcNow;
+                        existing.LastModifiedBy = request.Source;
+                        updated++;
+                    }
+                    else if (thisRunnerSkipped)
+                    {
+                        skippedAsOlder++;
+                    }
+                    else
+                    {
+                        unchanged++;
+                    }
+                }
+                else
+                {
+                    // New runner — INSERT and log all fields
+                    var runner = new Runner
+                    {
+                        CompetitionDate = competitionDate,
+                        StartNumber = dto.StartNumber,
+                        SiChipNo = dto.SiChipNo,
+                        Name = dto.Name,
+                        Surname = dto.Surname,
+                        ClassName = dto.ClassName,
+                        ClubName = dto.ClubName,
+                        Country = dto.Country,
+                        StatusId = dto.StatusId,
+                        StartPlace = dto.StartPlace,
+                        LastModifiedUtc = utcNow,
+                        LastModifiedBy = request.Source
+                    };
+                    db.Runners.Add(runner);
+
+                    changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Name", null, dto.Name, utcNow, request.Source));
+                    changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Surname", null, dto.Surname, utcNow, request.Source));
+                    changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClassName", null, dto.ClassName, utcNow, request.Source));
+                    changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClubName", null, dto.ClubName, utcNow, request.Source));
+                    if (dto.SiChipNo is not null)
+                        changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "SiChipNo", null, dto.SiChipNo, utcNow, request.Source));
+                    if (dto.Country is not null)
+                        changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Country", null, dto.Country, utcNow, request.Source));
+                    if (dto.StatusId != 1)
+                        changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StatusId", "1", dto.StatusId.ToString(), utcNow, request.Source));
+                    if (dto.StartPlace != 0)
+                        changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StartPlace", "0", dto.StartPlace.ToString(), utcNow, request.Source));
+
+                    inserted++;
+                }
+            }
+
+            if (changeLogEntries.Count > 0)
+                db.ChangeLogEntries.AddRange(changeLogEntries);
+
+            await db.SaveChangesAsync();
+
+            return Results.Ok(new BulkUploadResponse(
+                competitionDate,
+                competitionCreated,
+                inserted,
+                updated,
+                unchanged,
+                skippedAsOlder));
+        });
+
+        // PATCH /api/competitions/{date}/runners/{startNumber}
+        app.MapMethods("/api/competitions/{date}/runners/{startNumber}", ["PATCH"], async (
+            string date,
+            int startNumber,
+            PatchRunnerRequest request,
+            AppDbContext db) =>
+        {
+            if (!DateOnly.TryParse(date, out var competitionDate))
+                return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
+
+            var runner = await db.Runners.FindAsync(competitionDate, startNumber);
+            if (runner is null)
+                return Results.NotFound(new { error = $"Runner {startNumber} not found for {date}." });
+
+            // Last-write-wins: reject if incoming is older than server
+            if (request.LastModifiedUtc < runner.LastModifiedUtc)
+            {
+                return Results.Conflict(new PatchRunnerResponse(
+                    startNumber,
+                    Applied: false,
+                    Reason: "Server has a newer version of this runner.",
+                    ServerLastModifiedUtc: runner.LastModifiedUtc));
+            }
+
+            var utcNow = DateTimeOffset.UtcNow;
+            var changeLogEntries = new List<ChangeLogEntry>();
+            bool anyChange = false;
+
+            if (request.StatusId.HasValue)
+            {
+                int resolvedStatus = ResolveStatus(incoming: request.StatusId.Value, current: runner.StatusId);
+                if (resolvedStatus != runner.StatusId)
+                {
+                    changeLogEntries.Add(MakeLog(competitionDate, startNumber, "StatusId", runner.StatusId.ToString(), resolvedStatus.ToString(), utcNow, request.Source));
+                    runner.StatusId = resolvedStatus;
+                    anyChange = true;
+                }
+            }
+
+            if (request.SiChipNo is not null && request.SiChipNo != runner.SiChipNo)
+            {
+                changeLogEntries.Add(MakeLog(competitionDate, startNumber, "SiChipNo", runner.SiChipNo, request.SiChipNo, utcNow, request.Source));
+                runner.SiChipNo = request.SiChipNo;
+                anyChange = true;
+            }
+
+            if (request.Name is not null && request.Name != runner.Name)
+            {
+                changeLogEntries.Add(MakeLog(competitionDate, startNumber, "Name", runner.Name, request.Name, utcNow, request.Source));
+                runner.Name = request.Name;
+                anyChange = true;
+            }
+
+            if (request.Surname is not null && request.Surname != runner.Surname)
+            {
+                changeLogEntries.Add(MakeLog(competitionDate, startNumber, "Surname", runner.Surname, request.Surname, utcNow, request.Source));
+                runner.Surname = request.Surname;
+                anyChange = true;
+            }
+
+            if (request.ClubName is not null && request.ClubName != runner.ClubName)
+            {
+                changeLogEntries.Add(MakeLog(competitionDate, startNumber, "ClubName", runner.ClubName, request.ClubName, utcNow, request.Source));
+                runner.ClubName = request.ClubName;
+                anyChange = true;
+            }
+
+            if (request.Country is not null && request.Country != runner.Country)
+            {
+                changeLogEntries.Add(MakeLog(competitionDate, startNumber, "Country", runner.Country, request.Country, utcNow, request.Source));
+                runner.Country = request.Country;
+                anyChange = true;
+            }
+
+            if (request.StartPlace.HasValue && request.StartPlace.Value != runner.StartPlace)
+            {
+                changeLogEntries.Add(MakeLog(competitionDate, startNumber, "StartPlace", runner.StartPlace.ToString(), request.StartPlace.Value.ToString(), utcNow, request.Source));
+                runner.StartPlace = request.StartPlace.Value;
+                anyChange = true;
+            }
+
+            // ClassName is intentionally not patched — it's immutable after initial upload
+
+            if (anyChange)
+            {
+                runner.LastModifiedUtc = utcNow;
+                runner.LastModifiedBy = request.Source;
+                db.ChangeLogEntries.AddRange(changeLogEntries);
+                await db.SaveChangesAsync();
+            }
+
+            return Results.Ok(new PatchRunnerResponse(
+                startNumber,
+                Applied: anyChange,
+                Reason: anyChange ? null : "No fields changed.",
+                ServerLastModifiedUtc: runner.LastModifiedUtc));
+        });
+
+        // DELETE /api/competitions/{date}/runners — clear startlist for a date
+        app.MapDelete("/api/competitions/{date}/runners", async (string date, AppDbContext db) =>
+        {
+            if (!DateOnly.TryParse(date, out var competitionDate))
+                return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
+
+            var deleted = await db.Runners
+                .Where(r => r.CompetitionDate == competitionDate)
+                .ExecuteDeleteAsync();
+
+            return Results.Ok(new { deleted });
+        });
+    }
+
+    /// <summary>
+    /// Resolves the new status applying forward-only escalation rules.
+    /// DNS can override Started; neither can be downgraded to Registered.
+    /// </summary>
+    private static int ResolveStatus(int incoming, int current)
+    {
+        // Never downgrade Started(2) or DNS(3) back to Registered(1)
+        if (incoming == 1 && current is 2 or 3)
+            return current;
+
+        // DNS(3) can override Started(2) and Registered(1)
+        if (incoming == 3)
+            return 3;
+
+        // Started(2) overrides Registered(1) only
+        if (incoming == 2 && current == 1)
+            return 2;
+
+        return current;
+    }
+
+    private static ChangeLogEntry MakeLog(
+        DateOnly date, int startNumber, string field,
+        string? oldVal, string? newVal,
+        DateTimeOffset changedAt, string changedBy) => new()
+    {
+        CompetitionDate = date,
+        StartNumber = startNumber,
+        FieldName = field,
+        OldValue = oldVal,
+        NewValue = newVal,
+        ChangedAtUtc = changedAt,
+        ChangedBy = changedBy
+    };
+}

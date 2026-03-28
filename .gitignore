@@ -1,42 +1,32 @@
-# IntelliJ / Android Studio
+# ── .NET ─────────────────────────────────────────────────────────────────────
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.db
+*.db-shm
+*.db-wal
+appsettings.Development.json
+settings.json
+sync_log.txt
+*.nupkg
+
+# ── Android ──────────────────────────────────────────────────────────────────
 *.iml
+.gradle/
+local.properties
 .idea/
-.idea/caches/
-.idea/libraries/
-.idea/modules.xml
-.idea/workspace.xml
-.idea/navEditor.xml
-.idea/assetWizardSettings.xml
+AndroidReferee/app/build/
+AndroidReferee/build/
+AndroidReferee/captures/
+AndroidReferee/.externalNativeBuild/
+AndroidReferee/.cxx/
+*.apk
+*.aab
+*.keystore
 
-# Cursor / local editor state
-.cursor/
-.vscode/
-
-# OS files
+# ── OS ───────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-
-# Local machine config
-local.properties
-
-# Gradle / Kotlin caches
-.gradle/
-.kotlin/
-
-# Build outputs
-build/
-app/build/
-captures/
-*.apk
-*.ap_
-*.aab
-*.dex
-
-# Native build artifacts
-.externalNativeBuild/
-.cxx/
-
-# Signing material
-*.jks
-*.keystore
-keystore.properties
+desktop.ini

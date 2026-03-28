@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//mnt/c/Users/MarcisLuksevics/source/repos/Personal/**)",
+      "Bash(dir \"C:\\\\Users\\\\MarcisLuksevics\\\\source\\\\repos\\\\Personal\\\\KapaStartList\")"
+    ]
+  }
+}

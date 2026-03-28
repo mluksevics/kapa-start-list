@@ -1,0 +1,170 @@
+package com.orienteering.startref.ui.gate
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.orienteering.startref.data.local.RunnerDao
+import com.orienteering.startref.data.local.entity.RunnerEntity
+import com.orienteering.startref.data.repository.StartListRepository
+import com.orienteering.startref.data.si.SiStationReader
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+enum class GateSignal { IDLE, BRIGHT_GREEN, GREEN, ORANGE, RED }
+
+data class GateUiState(
+    val currentTimeMs: Long = System.currentTimeMillis(),
+    val currentMinuteRunners: List<RunnerEntity> = emptyList(),
+    val signal: GateSignal = GateSignal.IDLE,
+    val lastReadSiCard: String? = null,
+    val lastMatchedRunner: RunnerEntity? = null,
+    val pendingApproveRunner: RunnerEntity? = null,  // for ORANGE state
+    val statusLine: String = "Waiting for SI card..."
+)
+
+@HiltViewModel
+class GateViewModel @Inject constructor(
+    private val runnerDao: RunnerDao,
+    private val repository: StartListRepository,
+    private val siReader: SiStationReader
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(GateUiState())
+    val uiState: StateFlow<GateUiState> = _uiState.asStateFlow()
+
+    init {
+        // Clock tick
+        viewModelScope.launch {
+            while (true) {
+                val now = System.currentTimeMillis()
+                updateCurrentMinuteRunners(now)
+                _uiState.value = _uiState.value.copy(currentTimeMs = now)
+                delay(1000 - (now % 1000))
+            }
+        }
+
+        // SI card reads
+        viewModelScope.launch {
+            siReader.cardReadEvents.collect { siCard ->
+                handleCardRead(siCard)
+            }
+        }
+    }
+
+    fun onGateActive() = siReader.start()
+    fun onGateInactive() = siReader.stop()
+
+    fun approve() {
+        val runner = _uiState.value.pendingApproveRunner ?: return
+        viewModelScope.launch {
+            repository.markStarted(runner.startNumber)
+            _uiState.value = _uiState.value.copy(
+                signal = GateSignal.GREEN,
+                pendingApproveRunner = null,
+                statusLine = "Approved: #${runner.startNumber} ${runner.name} ${runner.surname}"
+            )
+            delay(2000)
+            resetSignal()
+        }
+    }
+
+    fun handleManually() {
+        val siCard = _uiState.value.lastReadSiCard ?: return
+        _uiState.value = _uiState.value.copy(
+            signal = GateSignal.IDLE,
+            pendingApproveRunner = null,
+            statusLine = "Handle manually: SI $siCard"
+        )
+    }
+
+    /** Called when user taps a runner row in RED state (assigns chip to that runner). */
+    fun assignChipToRunner(runner: RunnerEntity) {
+        val siCard = _uiState.value.lastReadSiCard ?: return
+        viewModelScope.launch {
+            repository.updateRunner(runner.copy(siCard = siCard))
+            repository.markStarted(runner.startNumber)
+            _uiState.value = _uiState.value.copy(
+                signal = GateSignal.GREEN,
+                pendingApproveRunner = null,
+                statusLine = "Assigned SI $siCard → #${runner.startNumber} ${runner.name} ${runner.surname}"
+            )
+            delay(2000)
+            resetSignal()
+        }
+    }
+
+    private suspend fun handleCardRead(siCard: String) {
+        val now = System.currentTimeMillis()
+        val currentTod = (now / 60_000).toInt() % (24 * 60)
+        val allRunners = runnerDao.getAll()
+
+        // Find runner by SI card
+        val matchedRunner = allRunners.firstOrNull { it.siCard == siCard }
+
+        if (matchedRunner == null) {
+            // RED — chip not found
+            _uiState.value = _uiState.value.copy(
+                signal = GateSignal.RED,
+                lastReadSiCard = siCard,
+                statusLine = "Not found: SI $siCard"
+            )
+            return
+        }
+
+        val runnerTod = (matchedRunner.startTime / 60_000).toInt() % (24 * 60)
+        val diffMinutes = currentTod - runnerTod
+
+        if (diffMinutes == 0) {
+            // BRIGHT_GREEN — exact minute match
+            repository.markStarted(matchedRunner.startNumber)
+            _uiState.value = _uiState.value.copy(
+                signal = GateSignal.BRIGHT_GREEN,
+                lastReadSiCard = siCard,
+                lastMatchedRunner = matchedRunner,
+                statusLine = "SI $siCard → #${matchedRunner.startNumber} ${matchedRunner.name} OK"
+            )
+            delay(2000)
+            _uiState.value = _uiState.value.copy(signal = GateSignal.GREEN)
+            delay(3000)
+            resetSignal()
+        } else if (diffMinutes in -5..5) {
+            // ORANGE — within ±5 min but not current minute
+            _uiState.value = _uiState.value.copy(
+                signal = GateSignal.ORANGE,
+                lastReadSiCard = siCard,
+                pendingApproveRunner = matchedRunner,
+                statusLine = "Wrong minute: SI $siCard → #${matchedRunner.startNumber} (${if (diffMinutes > 0) "+$diffMinutes" else "$diffMinutes"} min)"
+            )
+        } else {
+            // RED — found but too far from start time
+            _uiState.value = _uiState.value.copy(
+                signal = GateSignal.RED,
+                lastReadSiCard = siCard,
+                statusLine = "Wrong time: SI $siCard → #${matchedRunner.startNumber} ($diffMinutes min off)"
+            )
+        }
+    }
+
+    private suspend fun updateCurrentMinuteRunners(nowMs: Long) {
+        val currentTod = (nowMs / 60_000).toInt() % (24 * 60)
+        val all = runnerDao.getAll()
+        val current = all.filter { r ->
+            (r.startTime / 60_000).toInt() % (24 * 60) == currentTod
+        }.sortedBy { it.startNumber }
+        _uiState.value = _uiState.value.copy(currentMinuteRunners = current)
+    }
+
+    private fun resetSignal() {
+        _uiState.value = _uiState.value.copy(
+            signal = GateSignal.IDLE,
+            lastReadSiCard = null,
+            lastMatchedRunner = null,
+            pendingApproveRunner = null,
+            statusLine = "Waiting for SI card..."
+        )
+    }
+}
