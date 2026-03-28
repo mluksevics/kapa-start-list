@@ -5,16 +5,19 @@ partial class MainForm
     private System.ComponentModel.IContainer components = null;
 
     // Controls
-    private Label lblApiUrlCaption, lblApiUrl;
-    private Label lblApiKeyCaption, lblApiKey;
-    private Label lblDbPathCaption, lblDbPath;
+    private Label lblApiUrlCaption;
+    private TextBox txtApiUrl;
     private Button btnEditApi, btnBrowseDb;
+    private Label lblDbPathCaption, lblDbPath;
+    private Label lblStageCaption;
+    private ComboBox cmbDay;
+    private Label lblDayNote;
     private CheckBox chkAutoSync;
     private Label lblIntervalCaption;
     private NumericUpDown nudInterval;
     private Label lblIntervalUnit;
     private Label lblLastSyncCaption, lblLastSync;
-    private Button btnSyncNow, btnForcePush;
+    private Button btnSyncNow, btnForcePush, btnDbExplorer;
     private Label lblStatus;
     private TextBox txtLog;
     private Label lblLogCaption;
@@ -31,33 +34,58 @@ partial class MainForm
     {
         components = new System.ComponentModel.Container();
         Text = "StartRef Desktop";
-        Size = new System.Drawing.Size(800, 620);
+        Size = new System.Drawing.Size(800, 630);
         MinimumSize = new System.Drawing.Size(700, 500);
 
         var font = new System.Drawing.Font("Segoe UI", 9f);
         Font = font;
 
-        int y = 10, margin = 8, lw = 120, vw = 300, bw = 60;
+        int y = 10, margin = 8, lw = 120, bw = 60;
 
-        // ── Settings section ─────────────────────────────────────────────────
+        // ── API URL ───────────────────────────────────────────────────────────
         lblApiUrlCaption = MakeLabel("API URL:", 10, y, lw);
-        lblApiUrl = MakeLabel("(not set)", lw + margin + 10, y, vw);
-        btnEditApi = MakeButton("Edit", lw + margin + vw + 10, y, bw);
+        txtApiUrl = new TextBox
+        {
+            Location = new System.Drawing.Point(lw + margin + 10, y - 2),
+            Width = 440
+        };
+        txtApiUrl.Leave += txtApiUrl_Leave;
+        btnEditApi = MakeButton("Settings", lw + margin + 460, y, 75);
         btnEditApi.Click += btnEditApi_Click;
         y += 28;
 
-        lblApiKeyCaption = MakeLabel("API Key:", 10, y, lw);
-        lblApiKey = MakeLabel("(not set)", lw + margin + 10, y, vw);
-        y += 28;
-
+        // ── DB Path ───────────────────────────────────────────────────────────
         lblDbPathCaption = MakeLabel("DB Path:", 10, y, lw);
-        lblDbPath = MakeLabel("(not set)", lw + margin + 10, y, vw);
+        lblDbPath = MakeLabel("(not set)", lw + margin + 10, y, 350);
         lblDbPath.AutoEllipsis = true;
-        btnBrowseDb = MakeButton("Browse", lw + margin + vw + 10, y, bw);
+        btnBrowseDb = MakeButton("Browse", lw + margin + 360, y, bw);
         btnBrowseDb.Click += btnBrowseDb_Click;
         y += 28;
 
-        // Auto-sync row
+        // ── Stage selector ────────────────────────────────────────────────────
+        lblStageCaption = MakeLabel("Stage:", 10, y, lw);
+        cmbDay = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Location = new System.Drawing.Point(lw + margin + 10, y - 2),
+            Width = 460,
+            Enabled = false
+        };
+        cmbDay.SelectedIndexChanged += cmbDay_SelectedIndexChanged;
+        y += 28;
+
+        // Stage warning (shown in red when today has no matching stage)
+        lblDayNote = new Label
+        {
+            Text = "",
+            Location = new System.Drawing.Point(lw + margin + 10, y),
+            Size = new System.Drawing.Size(530, 18),
+            ForeColor = System.Drawing.Color.Red,
+            AutoSize = false
+        };
+        y += 22;
+
+        // ── Auto-sync row ─────────────────────────────────────────────────────
         chkAutoSync = new CheckBox
         {
             Text = "Auto-sync enabled",
@@ -91,7 +119,7 @@ partial class MainForm
         };
         y += 10;
 
-        // ── Buttons ──────────────────────────────────────────────────────────
+        // ── Action buttons ────────────────────────────────────────────────────
         btnSyncNow = new Button
         {
             Text = "Sync Now",
@@ -108,10 +136,18 @@ partial class MainForm
         };
         btnForcePush.Click += btnForcePush_Click;
 
-        lblStatus = MakeLabel("Status: Idle", 280, y + 8, 300);
+        btnDbExplorer = new Button
+        {
+            Text = "DbBridge Explorer",
+            Location = new System.Drawing.Point(270, y),
+            Size = new System.Drawing.Size(140, 30)
+        };
+        btnDbExplorer.Click += btnDbExplorer_Click;
+
+        lblStatus = MakeLabel("Status: Idle", 420, y + 8, 280);
         y += 40;
 
-        // ── Log ──────────────────────────────────────────────────────────────
+        // ── Log ───────────────────────────────────────────────────────────────
         lblLogCaption = MakeLabel("Log:", 10, y, 50);
         y += 20;
         txtLog = new TextBox
@@ -127,13 +163,13 @@ partial class MainForm
 
         Controls.AddRange(new Control[]
         {
-            lblApiUrlCaption, lblApiUrl, btnEditApi,
-            lblApiKeyCaption, lblApiKey,
+            lblApiUrlCaption, txtApiUrl, btnEditApi,
             lblDbPathCaption, lblDbPath, btnBrowseDb,
+            lblStageCaption, cmbDay, lblDayNote,
             chkAutoSync, lblIntervalCaption, nudInterval, lblIntervalUnit,
             lblLastSyncCaption, lblLastSync,
             sep,
-            btnSyncNow, btnForcePush, lblStatus,
+            btnSyncNow, btnForcePush, btnDbExplorer, lblStatus,
             lblLogCaption, txtLog
         });
     }

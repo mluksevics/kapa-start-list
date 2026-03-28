@@ -1,0 +1,216 @@
+using System.Text;
+
+namespace StartRef.Desktop;
+
+/// <summary>Result returned by every DbBridgeService method.</summary>
+public record DbBridgeResult(bool Success, int Code, string Message);
+
+/// <summary>Parsed etap (stage) info from DbGetEtapInfo.</summary>
+public record EtapInfo(string Name, string Date, int Nullzeit)
+{
+    /// <summary>Nullzeit converted from DLL internal units (seconds * 100) to hh:mm:ss.</summary>
+    public string NullzeitFormatted
+    {
+        get
+        {
+            try { return TimeSpan.FromSeconds(Nullzeit / 100.0).ToString(@"hh\:mm\:ss"); }
+            catch { return Nullzeit.ToString(); }
+        }
+    }
+}
+
+/// <summary>
+/// Managed wrapper around DbBridgeNative P/Invoke calls.
+/// Holds a single context handle (CtxHandle). Call Open() before any operation, Close() when done.
+/// Implements IDisposable — use with <c>using</c> to guarantee Close is called.
+/// </summary>
+public class DbBridgeService : IDisposable
+{
+    private IntPtr _ctx = IntPtr.Zero;
+    private readonly Action<string>? _log;
+
+    public bool IsOpen => _ctx != IntPtr.Zero;
+
+    /// <summary>True if DbBridge.dll is present next to the EXE.</summary>
+    public static bool IsAvailable =>
+        File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DbBridge.dll"));
+
+    public DbBridgeService(Action<string>? log = null)
+    {
+        _log = log;
+    }
+
+    // ── Lifecycle ────────────────────────────────────────────────────────────
+
+    /// <summary>Opens the DBISAM database at <paramref name="dataDir"/>. Returns true on success.</summary>
+    public bool Open(string dataDir)
+    {
+        if (IsOpen) return true;
+        try
+        {
+            _ctx = DbBridgeNative.DbOpen(dataDir);
+            if (_ctx == IntPtr.Zero)
+            {
+                _log?.Invoke("DbOpen returned NULL — check path and DLL dependencies.");
+                return false;
+            }
+            _log?.Invoke($"DB opened: {dataDir}");
+            return true;
+        }
+        catch (DllNotFoundException ex)
+        {
+            _log?.Invoke($"DbBridge.dll not found: {ex.Message}");
+            return false;
+        }
+        catch (BadImageFormatException ex)
+        {
+            _log?.Invoke($"Architecture mismatch (app must run as x86): {ex.Message}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"DbOpen exception: {ex.Message}");
+            return false;
+        }
+    }
+
+    public void Close()
+    {
+        if (!IsOpen) return;
+        try
+        {
+            DbBridgeNative.DbClose(_ctx);
+            _log?.Invoke("DB closed.");
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"DbClose exception: {ex.Message}");
+        }
+        finally
+        {
+            _ctx = IntPtr.Zero;
+        }
+    }
+
+    public void Dispose() => Close();
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private string GetLastError()
+    {
+        if (!IsOpen) return string.Empty;
+        var sb = new StringBuilder(1024);
+        try { DbBridgeNative.DbGetLastError(_ctx, sb, sb.Capacity); }
+        catch { /* ignore */ }
+        return sb.ToString();
+    }
+
+    private DbBridgeResult Ok(string message) => new(true, DbBridgeNative.DBR_OK, message);
+
+    private DbBridgeResult Fail(int code)
+    {
+        var err = GetLastError();
+        var msg = string.IsNullOrWhiteSpace(err) ? CodeName(code) : err;
+        return new(false, code, msg);
+    }
+
+    private DbBridgeResult Wrap(int code, string okMessage) =>
+        code == DbBridgeNative.DBR_OK ? Ok(okMessage) : Fail(code);
+
+    private DbBridgeResult NotOpen() => new(false, DbBridgeNative.DBR_CTX_NIL, "DB is not open.");
+
+    private static string CodeName(int code) => code switch
+    {
+        DbBridgeNative.DBR_ERROR => "General error",
+        DbBridgeNative.DBR_NOT_FOUND => "Not found",
+        DbBridgeNative.DBR_INVALID_DAY => "Invalid day (must be 1–6)",
+        DbBridgeNative.DBR_DAY_NOT_ALLOWED => "Day not allowed — enable test mode first",
+        DbBridgeNative.DBR_INVALID_TIME => "Invalid time format (expected hh:mm:ss)",
+        DbBridgeNative.DBR_CTX_NIL => "Context is null",
+        DbBridgeNative.DBR_MULTIPLE_MATCHES => "Multiple records matched",
+        _ => $"Unknown code {code}"
+    };
+
+    // ── Etap / Config ────────────────────────────────────────────────────────
+
+    public (DbBridgeResult Result, EtapInfo? Info) GetEtapInfo(int dayNo)
+    {
+        if (!IsOpen) return (NotOpen(), null);
+        var nameBuf = new StringBuilder(256);
+        var dateBuf = new StringBuilder(256);
+        int code = DbBridgeNative.DbGetEtapInfo(_ctx, dayNo, nameBuf, 255, dateBuf, 255, out int nullzeit);
+        var result = Wrap(code, "OK");
+        if (!result.Success) return (result, null);
+        return (result, new EtapInfo(nameBuf.ToString(), dateBuf.ToString(), nullzeit));
+    }
+
+    // ── Test mode ────────────────────────────────────────────────────────────
+
+    public DbBridgeResult SetTestMode(int dayNo) =>
+        IsOpen ? Wrap(DbBridgeNative.DbSetTestMode(_ctx, dayNo), "Test mode enabled") : NotOpen();
+
+    public DbBridgeResult DisableTestMode() =>
+        IsOpen ? Wrap(DbBridgeNative.DbDisableTestMode(_ctx), "Test mode disabled") : NotOpen();
+
+    // ── Read ─────────────────────────────────────────────────────────────────
+
+    public (DbBridgeResult Result, string? Raw) GetTeilnInfoByIdNr(int idNr)
+    {
+        if (!IsOpen) return (NotOpen(), null);
+        var buf = new StringBuilder(4096);
+        int code = DbBridgeNative.DbGetTeilnInfoByIdNr(_ctx, idNr, buf, buf.Capacity);
+        var result = Wrap(code, "OK");
+        return (result, result.Success ? buf.ToString() : null);
+    }
+
+    public (DbBridgeResult Result, string? Raw) GetIdNrListByStartNr(int startNr)
+    {
+        if (!IsOpen) return (NotOpen(), null);
+        var buf = new StringBuilder(4096);
+        int code = DbBridgeNative.DbGetIdNrListByStartNr(_ctx, startNr, buf, buf.Capacity);
+        var result = Wrap(code, "OK");
+        return (result, result.Success ? buf.ToString() : null);
+    }
+
+    public (DbBridgeResult Result, string? Raw) GetIdNrListByChipNr(int dayNo, int chipNr)
+    {
+        if (!IsOpen) return (NotOpen(), null);
+        var buf = new StringBuilder(4096);
+        int code = DbBridgeNative.DbGetIdNrListByChipNr(_ctx, dayNo, chipNr, buf, buf.Capacity);
+        var result = Wrap(code, "OK");
+        return (result, result.Success ? buf.ToString() : null);
+    }
+
+    // ── Change StartTime ─────────────────────────────────────────────────────
+
+    public DbBridgeResult ChangeStartTimeByIdNr(int dayNo, string hhmmss, int idNr) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeStartTimeByIdNr(_ctx, dayNo, hhmmss, idNr), "StartTime updated") : NotOpen();
+
+    public DbBridgeResult ChangeStartTimeByStartNr(int dayNo, string hhmmss, int startNr) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeStartTimeByStartNr(_ctx, dayNo, hhmmss, startNr), "StartTime updated") : NotOpen();
+
+    public DbBridgeResult ChangeStartTimeByChipNr(int dayNo, string hhmmss, int chipNr) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeStartTimeByChipNr(_ctx, dayNo, hhmmss, chipNr), "StartTime updated") : NotOpen();
+
+    // ── Change ChipNr ────────────────────────────────────────────────────────
+
+    public DbBridgeResult ChangeChipNrByIdNr(int dayNo, int newChipNr, int idNr) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeChipNrByIdNr(_ctx, dayNo, newChipNr, idNr), "ChipNr updated") : NotOpen();
+
+    public DbBridgeResult ChangeChipNrByStartNr(int dayNo, int newChipNr, int startNr) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeChipNrByStartNr(_ctx, dayNo, newChipNr, startNr), "ChipNr updated") : NotOpen();
+
+    public DbBridgeResult ChangeChipNrByOldChipNr(int dayNo, int newChipNr, int oldChipNr) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeChipNrByOldChipNr(_ctx, dayNo, newChipNr, oldChipNr), "ChipNr updated") : NotOpen();
+
+    // ── Change KatNr ─────────────────────────────────────────────────────────
+
+    public DbBridgeResult ChangeKatNrByIdNr(int newKatNr, int idNr) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeKatNrByIdNr(_ctx, newKatNr, idNr), "KatNr updated") : NotOpen();
+
+    public DbBridgeResult ChangeKatNrByStartNr(int newKatNr, int startNr) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeKatNrByStartNr(_ctx, newKatNr, startNr), "KatNr updated") : NotOpen();
+
+    public DbBridgeResult ChangeKatNrByChipNr(int dayNo, int newKatNr, int chipNr) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeKatNrByChipNr(_ctx, dayNo, newKatNr, chipNr), "KatNr updated") : NotOpen();
+}

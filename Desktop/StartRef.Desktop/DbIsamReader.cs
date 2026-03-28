@@ -1,13 +1,11 @@
-using System.Data;
-using System.Data.Odbc;
-
 namespace StartRef.Desktop;
 
 /// <summary>
-/// Reads the full start list from DBISAM via the user's installed DBISAM ODBC driver.
+/// Reads data from DBISAM via DbBridge DLL.
 ///
-/// Assumes an ODBC DSN or connection string pointing to the DBISAM database.
-/// Table and column names are typical OE12 DBISAM schema — adjust if yours differ.
+/// NOTE: Bulk read (ReadAll) is NOT supported because DbBridge DLL has no enumerate function.
+/// Ask the DLL author to add DbReadAllTeiln(ctx, buffer, bufferSize).
+/// Individual lookups by IdNr, StartNr, and ChipNr are supported.
 /// </summary>
 public class DbIsamReader
 {
@@ -18,73 +16,50 @@ public class DbIsamReader
         _getSettings = getSettings;
     }
 
-    private string BuildConnectionString()
+    /// <summary>
+    /// NOT SUPPORTED — DbBridge DLL has no bulk enumerate function.
+    /// Ask DLL author to implement DbReadAllTeiln(ctx, buffer, bufferSize).
+    /// </summary>
+    public List<BulkRunnerDto> ReadAll() =>
+        throw new NotSupportedException(
+            "DbBridge DLL lacks bulk read. Ask DLL author to add DbReadAllTeiln(ctx, buffer, bufferSize).");
+
+    /// <summary>Returns raw participant info buffer for a given IdNr, or null if not found.</summary>
+    public string? GetRawTeilnInfoByIdNr(int idNr)
     {
-        var dbPath = _getSettings().DbIsamPath;
-        // DBISAM ODBC driver connection string; adjust driver name as needed.
-        return $"Driver={{DBISAM 4 ODBC Driver}};DatabaseName={dbPath};";
+        var settings = _getSettings();
+        using var db = new DbBridgeService();
+        if (!db.Open(settings.DbIsamPath)) return null;
+        var (result, raw) = db.GetTeilnInfoByIdNr(idNr);
+        return result.Success ? raw : null;
     }
 
-    /// <summary>
-    /// Reads all runners from the DBISAM start list.
-    /// Returns an empty list if the DB is unavailable.
-    /// </summary>
-    public List<BulkRunnerDto> ReadAll()
+    /// <summary>Returns IdNr list buffer for a given StartNr, or null if not found.</summary>
+    public string? FindIdNrListByStartNr(int startNr)
     {
-        var runners = new List<BulkRunnerDto>();
-        try
-        {
-            using var conn = new OdbcConnection(BuildConnectionString());
-            conn.Open();
+        var settings = _getSettings();
+        using var db = new DbBridgeService();
+        if (!db.Open(settings.DbIsamPath)) return null;
+        var (result, raw) = db.GetIdNrListByStartNr(startNr);
+        return result.Success ? raw : null;
+    }
 
-            // OE12 table is typically named "Meldungen" (entries) or "Starts".
-            // Adjust the query to match your actual DBISAM table/column names.
-            using var cmd = new OdbcCommand(@"
-                SELECT
-                    StartnNr      AS StartNumber,
-                    SIKarte       AS SiChipNo,
-                    Vorname       AS Name,
-                    Nachname      AS Surname,
-                    Kategorie     AS ClassName,
-                    Verein        AS ClubName,
-                    Land          AS Country,
-                    StartPos      AS StartPlace,
-                    AufgabeTyp    AS DnsFlag
-                FROM Starts
-                ORDER BY StartnNr", conn);
-
-            using var reader = cmd.ExecuteReader();
-            while (reader.Read())
-            {
-                var dnsFlag = reader["DnsFlag"]?.ToString();
-                var statusId = dnsFlag == "DNS" ? 3 : 1;
-
-                runners.Add(new BulkRunnerDto
-                {
-                    StartNumber = Convert.ToInt32(reader["StartNumber"]),
-                    SiChipNo = reader["SiChipNo"]?.ToString()?.Trim().NullIfEmpty(),
-                    Name = reader["Name"]?.ToString()?.Trim() ?? "",
-                    Surname = reader["Surname"]?.ToString()?.Trim() ?? "",
-                    ClassName = reader["ClassName"]?.ToString()?.Trim() ?? "",
-                    ClubName = reader["ClubName"]?.ToString()?.Trim() ?? "",
-                    Country = reader["Country"]?.ToString()?.Trim().NullIfEmpty(),
-                    StartPlace = reader["StartPlace"] == DBNull.Value ? 0 : Convert.ToInt32(reader["StartPlace"]),
-                    StatusId = statusId
-                });
-            }
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException($"DBISAM read failed: {ex.Message}", ex);
-        }
-
-        return runners;
+    /// <summary>Returns IdNr list buffer for a given day+ChipNr, or null if not found.</summary>
+    public string? FindIdNrListByChipNr(int dayNo, int chipNr)
+    {
+        var settings = _getSettings();
+        using var db = new DbBridgeService();
+        if (!db.Open(settings.DbIsamPath)) return null;
+        var (result, raw) = db.GetIdNrListByChipNr(dayNo, chipNr);
+        return result.Success ? raw : null;
     }
 }
 
 /// <summary>
-/// Writes DNS status back to DBISAM for runners that the API reports as DNS.
-/// Only modifies the DNS/status field — does not touch any other runner data.
+/// Writes field changes to DBISAM via DbBridge DLL.
+///
+/// NOT SUPPORTED: WriteDnsStatuses — DLL has no DbChangeDnsByStartNr function.
+/// Ask the DLL author to add DbChangeDnsByStartNr(ctx, startNr, dnsFlag).
 /// </summary>
 public class DbIsamWriter
 {
@@ -95,38 +70,42 @@ public class DbIsamWriter
         _getSettings = getSettings;
     }
 
-    private string BuildConnectionString()
+    /// <summary>
+    /// NOT SUPPORTED — DbBridge DLL has no DNS write function.
+    /// Ask DLL author to add DbChangeDnsByStartNr(ctx, startNr, dnsFlag).
+    /// </summary>
+    public void WriteDnsStatuses(IEnumerable<int> _) =>
+        throw new NotSupportedException(
+            "DbBridge DLL lacks DNS write. Ask DLL author to add DbChangeDnsByStartNr(ctx, startNr, dnsFlag).");
+
+    /// <summary>Changes ChipNr for the runner with the given StartNr on the specified day.</summary>
+    public DbBridgeResult WriteChipNr(int dayNo, int startNr, int chipNr)
     {
-        var dbPath = _getSettings().DbIsamPath;
-        return $"Driver={{DBISAM 4 ODBC Driver}};DatabaseName={dbPath};";
+        var settings = _getSettings();
+        using var db = new DbBridgeService();
+        if (!db.Open(settings.DbIsamPath))
+            return new DbBridgeResult(false, DbBridgeNative.DBR_ERROR, "Cannot open DBISAM");
+        return db.ChangeChipNrByStartNr(dayNo, chipNr, startNr);
     }
 
-    /// <summary>
-    /// Sets DNS status for the given start numbers in DBISAM.
-    /// Called after a PULL that found runners with statusId=3 (DNS) from field devices.
-    /// </summary>
-    public void WriteDnsStatuses(IEnumerable<int> dnsStartNumbers)
+    /// <summary>Changes StartTime for the runner with the given StartNr on the specified day.</summary>
+    public DbBridgeResult WriteStartTime(int dayNo, int startNr, string hhmmss)
     {
-        var numbers = dnsStartNumbers.ToList();
-        if (numbers.Count == 0) return;
+        var settings = _getSettings();
+        using var db = new DbBridgeService();
+        if (!db.Open(settings.DbIsamPath))
+            return new DbBridgeResult(false, DbBridgeNative.DBR_ERROR, "Cannot open DBISAM");
+        return db.ChangeStartTimeByStartNr(dayNo, hhmmss, startNr);
+    }
 
-        try
-        {
-            using var conn = new OdbcConnection(BuildConnectionString());
-            conn.Open();
-
-            foreach (var startNumber in numbers)
-            {
-                using var cmd = new OdbcCommand(
-                    "UPDATE Starts SET AufgabeTyp = 'DNS' WHERE StartnNr = ?", conn);
-                cmd.Parameters.AddWithValue("@sn", startNumber);
-                cmd.ExecuteNonQuery();
-            }
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException($"DBISAM DNS write failed: {ex.Message}", ex);
-        }
+    /// <summary>Changes KatNr for the runner with the given StartNr.</summary>
+    public DbBridgeResult WriteKatNr(int startNr, int katNr)
+    {
+        var settings = _getSettings();
+        using var db = new DbBridgeService();
+        if (!db.Open(settings.DbIsamPath))
+            return new DbBridgeResult(false, DbBridgeNative.DBR_ERROR, "Cannot open DBISAM");
+        return db.ChangeKatNrByStartNr(katNr, startNr);
     }
 }
 

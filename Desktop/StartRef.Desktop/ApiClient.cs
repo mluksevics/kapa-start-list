@@ -31,7 +31,11 @@ public class ApiClient
 
         try
         {
-            return await _http.GetFromJsonAsync<GetRunnersResponse>(url, ct);
+            var msg = new HttpRequestMessage(HttpMethod.Get, url);
+            msg.Headers.Add("X-Api-Key", S.ApiKey);
+            var response = await _http.SendAsync(msg, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            return await response.Content.ReadFromJsonAsync<GetRunnersResponse>(ct);
         }
         catch
         {
