@@ -11,6 +11,7 @@ public partial class MainForm : Form
     private string? _runningCommandName;
     private System.Windows.Forms.Timer? _runningStatusTimer;
     private DateTimeOffset _runningStartedAtUtc;
+    private bool _pushActionsEnabled;
 
     private sealed record EtapItem(int DayNo, string Name, string Date)
     {
@@ -30,6 +31,7 @@ public partial class MainForm : Form
         _syncService = new SyncService(_api, () => _settings, AppendLog);
         _syncService.AutoSyncStarted += SyncService_AutoSyncStarted;
         _syncService.AutoSyncFinished += SyncService_AutoSyncFinished;
+        _pushActionsEnabled = false;
 
         LoadSettingsToUi();   // sets chkAutoSync, which fires Start() if enabled
         LoadStagesFromDb();
@@ -63,7 +65,11 @@ public partial class MainForm : Form
         lblDayNote.Text = "";
         cmbDay.Enabled = false;
 
-        if (string.IsNullOrWhiteSpace(_settings.DbIsamPath)) return;
+        if (string.IsNullOrWhiteSpace(_settings.DbIsamPath))
+        {
+            SetPushActionsEnabled(false);
+            return;
+        }
 
         var today = DateOnly.FromDateTime(DateTime.Today);
         int todayIndex = -1;
@@ -71,7 +77,14 @@ public partial class MainForm : Form
         try
         {
             using var db = new DbBridgeService();
-            if (!db.Open(_settings.DbIsamPath)) return;
+            if (!db.Open(_settings.DbIsamPath))
+            {
+                AppendLog($"{DateTime.Now:HH:mm:ss} Failed to open DBISAM: {_settings.DbIsamPath}");
+                AppendLog($"{DateTime.Now:HH:mm:ss} Check DLL logs: {DbBridgeService.GlobalDllLogPath}");
+                AppendLog($"{DateTime.Now:HH:mm:ss} Check DB log: {DbBridgeService.DbErrorLogPath(_settings.DbIsamPath)}");
+                SetPushActionsEnabled(false);
+                return;
+            }
 
             for (int dayNo = 1; dayNo <= 6; dayNo++)
             {
@@ -81,6 +94,7 @@ public partial class MainForm : Form
                 if (todayIndex < 0 && TryParseEtapDate(info.Date, out var d) && d == today)
                     todayIndex = cmbDay.Items.Count - 1;
             }
+            SetPushActionsEnabled(true);
         }
         catch (Exception ex)
         {
@@ -88,6 +102,7 @@ public partial class MainForm : Form
             AppendLog($"{DateTime.Now:HH:mm:ss} Check DLL logs: {DbBridgeService.GlobalDllLogPath}");
             if (!string.IsNullOrWhiteSpace(_settings.DbIsamPath))
                 AppendLog($"{DateTime.Now:HH:mm:ss} Check DB log: {DbBridgeService.DbErrorLogPath(_settings.DbIsamPath)}");
+            SetPushActionsEnabled(false);
         }
 
         if (cmbDay.Items.Count == 0) return;
@@ -187,6 +202,57 @@ public partial class MainForm : Form
         lblStatus.Text = $"Status: {status}";
     }
 
+    private void SetPushActionsEnabled(bool enabled)
+    {
+        var previous = _pushActionsEnabled;
+        _pushActionsEnabled = enabled;
+
+        if (enabled && !previous)
+            AppendLog($"{DateTime.Now:HH:mm:ss} DBISAM opened successfully: {_settings.DbIsamPath}");
+
+        if (!enabled)
+            _syncService.Stop();
+
+        if (_cancelSyncCts is null)
+        {
+            btnSyncNow.Enabled = enabled;
+            btnForcePush.Enabled = enabled;
+            btnPushClubs.Enabled = enabled;
+        }
+    }
+
+    private bool EnsureDbAvailableForPush(string actionName)
+    {
+        if (string.IsNullOrWhiteSpace(_settings.DbIsamPath))
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Failed to run {actionName}: DBISAM path is not set.");
+            SetPushActionsEnabled(false);
+            return false;
+        }
+
+        try
+        {
+            using var db = new DbBridgeService();
+            if (!db.Open(_settings.DbIsamPath))
+            {
+                AppendLog($"{DateTime.Now:HH:mm:ss} Failed to run {actionName}: cannot open DBISAM.");
+                AppendLog($"{DateTime.Now:HH:mm:ss} Check DLL logs: {DbBridgeService.GlobalDllLogPath}");
+                AppendLog($"{DateTime.Now:HH:mm:ss} Check DB log: {DbBridgeService.DbErrorLogPath(_settings.DbIsamPath)}");
+                SetPushActionsEnabled(false);
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Failed to run {actionName}: DBISAM open error: {ex.Message}");
+            SetPushActionsEnabled(false);
+            return false;
+        }
+
+        SetPushActionsEnabled(true);
+        return true;
+    }
+
     private bool TryBeginCancelableCommand(string commandName)
     {
         if (_cancelSyncCts is not null)
@@ -214,13 +280,13 @@ public partial class MainForm : Form
         _cancelSyncCts = null;
         _runningCommandName = null;
         btnCancelSync.Enabled = false;
-        btnSyncNow.Enabled = true;
-        btnForcePush.Enabled = true;
-        btnPushClubs.Enabled = true;
+        btnSyncNow.Enabled = _pushActionsEnabled;
+        btnForcePush.Enabled = _pushActionsEnabled;
+        btnPushClubs.Enabled = _pushActionsEnabled;
         btnPeekWebApi.Enabled = true;
         btnPullPast.Enabled = true;
         StopRunningStatus();
-        if (_settings.AutoSyncEnabled) _syncService.Start();
+        if (_settings.AutoSyncEnabled && _pushActionsEnabled) _syncService.Start();
     }
 
     private void StartRunningStatus(string commandName)
@@ -249,6 +315,7 @@ public partial class MainForm : Form
 
     private async void btnSyncNow_Click(object sender, EventArgs e)
     {
+        if (!EnsureDbAvailableForPush("Sync Now")) return;
         if (!TryBeginCancelableCommand("Sync Now")) return;
         var cts = _cancelSyncCts;
         if (cts is null) return;
@@ -271,6 +338,7 @@ public partial class MainForm : Form
 
     private async void btnForcePush_Click(object sender, EventArgs e)
     {
+        if (!EnsureDbAvailableForPush("Force Push All")) return;
         if (MessageBox.Show(
                 "Force Push All will overwrite all non-status fields on the server with current DBISAM values.\n\nContinue?",
                 "Confirm Force Push",
@@ -303,6 +371,7 @@ public partial class MainForm : Form
 
     private async void btnPushClubs_Click(object sender, EventArgs e)
     {
+        if (!EnsureDbAvailableForPush("Push Clubs")) return;
         if (!TryBeginCancelableCommand("Push Clubs")) return;
         var cts = _cancelSyncCts;
         if (cts is null) return;
@@ -438,6 +507,11 @@ public partial class MainForm : Form
     private void SyncService_AutoSyncStarted()
     {
         if (InvokeRequired) { Invoke(SyncService_AutoSyncStarted); return; }
+        if (!EnsureDbAvailableForPush("Auto-sync"))
+        {
+            _syncService.CancelAutoSync();
+            return;
+        }
         if (_cancelSyncCts is not null) return;
         _runningCommandName = "Auto-sync";
         _cancelSyncCts = new CancellationTokenSource();
@@ -459,9 +533,9 @@ public partial class MainForm : Form
         _cancelSyncCts = null;
         _runningCommandName = null;
         btnCancelSync.Enabled = false;
-        btnSyncNow.Enabled = true;
-        btnForcePush.Enabled = true;
-        btnPushClubs.Enabled = true;
+        btnSyncNow.Enabled = _pushActionsEnabled;
+        btnForcePush.Enabled = _pushActionsEnabled;
+        btnPushClubs.Enabled = _pushActionsEnabled;
         btnPeekWebApi.Enabled = true;
         btnPullPast.Enabled = true;
         StopRunningStatus();
@@ -472,7 +546,21 @@ public partial class MainForm : Form
     {
         _settings.AutoSyncEnabled = chkAutoSync.Checked;
         _settings.Save();
-        if (_settings.AutoSyncEnabled) _syncService.Start(); else _syncService.Stop();
+        if (_settings.AutoSyncEnabled)
+        {
+            if (!EnsureDbAvailableForPush("Auto-sync"))
+            {
+                _settings.AutoSyncEnabled = false;
+                _settings.Save();
+                chkAutoSync.Checked = false;
+                return;
+            }
+            _syncService.Start();
+        }
+        else
+        {
+            _syncService.Stop();
+        }
     }
 
     private void btnFailureSound_Click(object sender, EventArgs e)
