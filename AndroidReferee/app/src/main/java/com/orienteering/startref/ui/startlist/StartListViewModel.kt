@@ -94,7 +94,8 @@ class StartListViewModel @Inject constructor(
         val s = appSettings
         val adjustedMinute = timeMinute - s.lateStartMinutes - s.prestartMinutes
         val tod = ((adjustedMinute.toInt() % (24 * 60)) + (24 * 60)) % (24 * 60)
-        buildItems(runners.filter { it.startPlace == s.startPlace }, tod)
+        val filtered = if (s.startPlace == 0) runners else runners.filter { it.startPlace == s.startPlace }
+        buildItems(filtered, tod)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private var lastAlertMinute = -1L

@@ -23,7 +23,7 @@ data class AppSettings(
             apiBaseUrl = "https://startref.azurewebsites.net/",
             apiKey = "marcisTestKey",
             pollIntervalSeconds = 30,
-            startPlace = 1,
+            startPlace = 0,
             headerText = "Orienteering Start",
             prestartMinutes = -2,
             lateStartMinutes = 0,

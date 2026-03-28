@@ -251,7 +251,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    listOf(1, 2, 3).forEach { place ->
+                    listOf(0 to "All", 1 to "1", 2 to "2", 3 to "3").forEach { (place, label) ->
                         Row(
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                         ) {
@@ -259,7 +259,7 @@ fun SettingsScreen(
                                 selected = settings.startPlace == place,
                                 onClick = { viewModel.updateStartPlace(place) }
                             )
-                            Text(text = place.toString())
+                            Text(text = label)
                         }
                     }
                 }
