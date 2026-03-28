@@ -1,23 +1,6 @@
 using System.Text;
 
-namespace StartRef.Desktop;
-
-/// <summary>Result returned by every DbBridgeService method.</summary>
-public record DbBridgeResult(bool Success, int Code, string Message);
-
-/// <summary>Parsed etap (stage) info from DbGetEtapInfo.</summary>
-public record EtapInfo(string Name, string Date, int Nullzeit)
-{
-    /// <summary>Nullzeit converted from DLL internal units (seconds * 100) to hh:mm:ss.</summary>
-    public string NullzeitFormatted
-    {
-        get
-        {
-            try { return TimeSpan.FromSeconds(Nullzeit / 100.0).ToString(@"hh\:mm\:ss"); }
-            catch { return Nullzeit.ToString(); }
-        }
-    }
-}
+namespace StartRef.Desktop.DbBridge;
 
 /// <summary>
 /// Managed wrapper around DbBridgeNative P/Invoke calls.
@@ -35,10 +18,6 @@ public class DbBridgeService : IDisposable
     private readonly Action<string>? _log;
 
     public bool IsOpen => _ctx != IntPtr.Zero;
-
-    /// <summary>True if DbBridge.dll is present next to the EXE.</summary>
-    public static bool IsAvailable =>
-        File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DbBridge.dll"));
 
     public static string GlobalDllLogPath =>
         Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DbBridge_dll.log");
@@ -202,7 +181,7 @@ public class DbBridgeService : IDisposable
 
     // ── Etap / Config ────────────────────────────────────────────────────────
 
-    public (DbBridgeResult Result, EtapInfo? Info) GetEtapInfo(int dayNo)
+    public (DbBridgeResult Result, DbEtapInfo? Info) GetEtapInfo(int dayNo)
     {
         if (!IsOpen) return (NotOpen(), null);
         var nameBuf = new byte[256];
@@ -210,7 +189,7 @@ public class DbBridgeService : IDisposable
         int code = DbBridgeNative.DbGetEtapInfo(_ctx, dayNo, nameBuf, 255, dateBuf, 255, out int nullzeit);
         var result = Wrap(code, "OK");
         if (!result.Success) return (result, null);
-        return (result, new EtapInfo(DecodeBuffer(nameBuf), DecodeBuffer(dateBuf), nullzeit));
+        return (result, new DbEtapInfo(DecodeBuffer(nameBuf), DecodeBuffer(dateBuf), nullzeit));
     }
 
     // ── Test mode ────────────────────────────────────────────────────────────
@@ -282,6 +261,20 @@ public class DbBridgeService : IDisposable
 
     public DbBridgeResult ChangeKatNrByChipNr(int dayNo, int newKatNr, int chipNr) =>
         IsOpen ? Wrap(DbBridgeNative.DbChangeKatNrByChipNr(_ctx, dayNo, newKatNr, chipNr), "KatNr updated") : NotOpen();
+
+    // ── Change Name / Surname / ClubNr ───────────────────────────────────────
+    // TODO: DLL functions below do not yet exist in DbBridgeNative.cs.
+    //       Request DbChangeNameByStartNr, DbChangeSurnameByStartNr, DbChangeClubNrByStartNr
+    //       from the Delphi developer, then wire them up here.
+
+    public DbBridgeResult ChangeNameByStartNr(int startNr, string name) =>
+        throw new NotSupportedException("DbChangeNameByStartNr not yet available in DLL.");
+
+    public DbBridgeResult ChangeSurnameByStartNr(int startNr, string surname) =>
+        throw new NotSupportedException("DbChangeSurnameByStartNr not yet available in DLL.");
+
+    public DbBridgeResult ChangeClubNrByStartNr(int newClubNr, int startNr) =>
+        throw new NotSupportedException("DbChangeClubNrByStartNr not yet available in DLL.");
 
     // ── Update Name ───────────────────────────────────────────────────────────
 

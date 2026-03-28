@@ -1,7 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using StartRef.Desktop.Models;
 
-namespace StartRef.Desktop;
+namespace StartRef.Desktop.Services;
 
 /// <summary>
 /// HTTP client for the StartRef API.

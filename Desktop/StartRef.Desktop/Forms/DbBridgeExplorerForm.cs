@@ -1,4 +1,6 @@
-namespace StartRef.Desktop;
+using StartRef.Desktop.DbBridge;
+
+namespace StartRef.Desktop.Forms;
 
 /// <summary>
 /// Standalone dialog for manually testing every DbBridge DLL function and exploring raw data.

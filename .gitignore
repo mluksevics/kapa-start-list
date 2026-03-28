@@ -11,7 +11,8 @@ appsettings.Development.json
 settings.json
 sync_log.txt
 *.nupkg
-DbBridge/
+/DbBridge/
+.cursor/plans/
 
 # ── Android ──────────────────────────────────────────────────────────────────
 *.iml

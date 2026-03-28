@@ -1,4 +1,6 @@
-namespace StartRef.Desktop;
+using StartRef.Desktop;
+
+namespace StartRef.Desktop.Forms;
 
 /// <summary>Dialog for API Key and Device Name (URL is edited inline on the main form).</summary>
 public class SettingsDialog : Form

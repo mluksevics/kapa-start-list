@@ -1,4 +1,8 @@
-namespace StartRef.Desktop;
+using StartRef.Desktop;
+using StartRef.Desktop.DbBridge;
+using StartRef.Desktop.Services;
+
+namespace StartRef.Desktop.Forms;
 
 public partial class MainForm : Form
 {
@@ -28,7 +32,8 @@ public partial class MainForm : Form
         _logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sync_log.txt");
 
         _api = new ApiClient(() => _settings);
-        _syncService = new SyncService(_api, () => _settings, AppendLog);
+        var dbIsamRepository = new DbIsamRepository(AppendLog);
+        _syncService = new SyncService(_api, dbIsamRepository, () => _settings, AppendLog);
         _syncService.AutoSyncStarted += SyncService_AutoSyncStarted;
         _syncService.AutoSyncFinished += SyncService_AutoSyncFinished;
         _pushActionsEnabled = false;

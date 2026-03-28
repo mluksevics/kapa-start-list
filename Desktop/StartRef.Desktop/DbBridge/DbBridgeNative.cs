@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace StartRef.Desktop;
+namespace StartRef.Desktop.DbBridge;
 
 /// <summary>
 /// Raw P/Invoke declarations for DbBridge.dll (32-bit DBISAM access bridge).
@@ -19,8 +19,6 @@ internal static class DbBridgeNative
 
     // ── Open / Close ─────────────────────────────────────────────────────────
 
-    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-    public static extern IntPtr DbOpen(string dataDir);
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, EntryPoint = "DbOpen")]
     public static extern IntPtr DbOpenRaw(byte[] dataDir);
 
@@ -97,8 +95,17 @@ internal static class DbBridgeNative
     // ── Update Name ───────────────────────────────────────────────────────────
 
     /// <summary>Updates the Name field of a record in the given table by IdNr (e.g. tableName="Teiln").</summary>
-    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-    public static extern int DbUpdateName(IntPtr ctxHandle, string tableName, int idNr, string newName);
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, EntryPoint = "DbUpdateName")]
     public static extern int DbUpdateNameRaw(IntPtr ctxHandle, byte[] tableName, int idNr, byte[] newName);
+
+    // ── TODO: Not yet in DLL — request from Delphi developer ─────────────────
+
+    // [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+    // public static extern int DbChangeNameByStartNr(IntPtr ctxHandle, int startNr, byte[] newName);
+
+    // [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+    // public static extern int DbChangeSurnameByStartNr(IntPtr ctxHandle, int startNr, byte[] newSurname);
+
+    // [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    // public static extern int DbChangeClubNrByStartNr(IntPtr ctxHandle, int newClubNr, int startNr);
 }

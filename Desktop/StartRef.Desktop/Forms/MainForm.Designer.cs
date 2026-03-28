@@ -1,4 +1,4 @@
-namespace StartRef.Desktop;
+namespace StartRef.Desktop.Forms;
 
 partial class MainForm
 {
