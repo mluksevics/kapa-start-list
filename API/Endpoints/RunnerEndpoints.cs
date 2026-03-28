@@ -18,6 +18,18 @@ public static class RunnerEndpoints
             if (!DateOnly.TryParse(date, out var competitionDate))
                 return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
 
+            // Auto-create competition if missing so first daily pull can initialize the date.
+            var competition = await db.Competitions.FindAsync(competitionDate);
+            if (competition is null)
+            {
+                db.Competitions.Add(new Competition
+                {
+                    Date = competitionDate,
+                    CreatedAtUtc = DateTimeOffset.UtcNow
+                });
+                await db.SaveChangesAsync();
+            }
+
             var serverTimeUtc = DateTimeOffset.UtcNow;
 
             var query = db.Runners
