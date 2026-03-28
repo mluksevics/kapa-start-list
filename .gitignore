@@ -12,7 +12,8 @@ settings.json
 sync_log.txt
 *.nupkg
 /DbBridge/
-.cursor/plans/
+.cursor/
+.claude/
 Desktop/Library/DbBridge.dll
 .tmp/
 
