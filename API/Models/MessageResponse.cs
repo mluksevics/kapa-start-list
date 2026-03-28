@@ -16,3 +16,9 @@ public sealed record ChangeLogEntryResponse(
 public sealed record StatusResponse(int Id, string Name);
 
 public sealed record CompetitionResponse(DateOnly Date, string? Name, DateTimeOffset CreatedAtUtc);
+
+public sealed record CompetitionRunnerCountResponse(
+    DateOnly Date,
+    string? Name,
+    int RunnersCount
+);

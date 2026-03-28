@@ -30,6 +30,7 @@ await using (var scope = app.Services.CreateAsyncScope())
 app.UseResponseCompression();
 app.UseMiddleware<ApiKeyAuthMiddleware>();
 
+app.MapRootEndpoints();
 app.MapStatusEndpoints();
 app.MapCompetitionEndpoints();
 app.MapRunnerEndpoints();
