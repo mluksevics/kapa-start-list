@@ -17,29 +17,35 @@ Real-time start-list management for orienteering events. Three components talk t
 ## Architecture
 
 ```
- OE12 (event software)
-      │ writes
-      ▼
-  DBISAM DB ◄── ChipNr/KatNr/StartTime written back ──────────┐
-      │                                                         │
-      │ scanned (Force Push)                                    │
-      ▼                                                         │
- Desktop App ──── PUT /runners (bulk) ──► .NET API ◄──── PATCH /runners ──── Android (referee)
-                                          (Azure SQL)          ▲
-                                              │                │
-                                  GET /runners?changedSince ───┘
-                                          Android / Desktop (~30–60s poll)
+OE12 (event software)
+  -> writes local event data
+  -> DBISAM DB
+
+Desktop App
+  -> reads/scans DBISAM (Force Push source)
+  -> writes ChipNr/KatNr/StartTime back to DBISAM (via DbBridge.dll)
+  -> PUT /runners (bulk) to .NET API
+  -> GET /runners?changedSince from .NET API (delta pull)
+
+Android (referee/gate)
+  -> PATCH /runners to .NET API
+  -> GET /runners?changedSince from .NET API (delta pull)
+
+.NET API (Azure SQL)
+  <-> central source of truth for mobile + desktop sync
 ```
 
 **Sync flow (Desktop, regular cycle, every ~60 s):**
-1. PULL from API (`GET /runners?changedSince={watermark}`) — receive changes from field devices
-2. Write ChipNr, KatNr, and StartTime changes back to DBISAM via DbBridge DLL
-3. Save server timestamp as watermark for the next delta
+1. Pull deltas from API (`GET /runners?changedSince={watermark}`) to receive field updates
+2. Compare pulled values vs current DBISAM values
+3. Write only changed ChipNr/KatNr/StartTime back to DBISAM via DbBridge DLL
+4. Save server timestamp as watermark for next delta pull
 
 **Force Push All (Desktop, on demand):**
-1. Regular sync cycle first
-2. Scan all runners from DBISAM (start numbers 1–4000)
-3. Bulk-upload to API (`PUT /runners`) — overwrites non-status fields; status never downgrades
+1. Run regular sync cycle first
+2. Scan all runners from DBISAM (start numbers 1-4000)
+3. Bulk-upload to API (`PUT /runners`)
+4. API updates non-status fields; status never downgrades
 
 **Sync flow (Android, every ~30 s):**
 - Delta poll: `GET /runners?changedSince={watermark}`
