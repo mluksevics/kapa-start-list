@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using StartRef.Api.Data;
 
 #nullable disable
 
@@ -8,6 +10,8 @@ namespace StartRef.Api.Migrations;
 /// Introduces Class/Club lookup tables, migrates inline name columns to those tables,
 /// drops ClassName/ClubName from Runners, and adds StartTime (time NULL) to Runners.
 /// </summary>
+[DbContext(typeof(AppDbContext))]
+[Migration("20260328000001_LookupTablesAndStartTime")]
 public partial class LookupTablesAndStartTime : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
