@@ -24,7 +24,7 @@ class StartRefApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        // Start background delta-sync polling (30s interval)
+        // Start background delta-sync polling (interval from settings)
         appScope.launch {
             syncManager.startPolling()
         }

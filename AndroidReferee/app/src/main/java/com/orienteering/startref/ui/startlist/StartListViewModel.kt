@@ -13,6 +13,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.orienteering.startref.data.local.ClassEntry
+import com.orienteering.startref.data.local.ClubEntry
 import com.orienteering.startref.data.local.entity.RunnerEntity
 import com.orienteering.startref.data.repository.StartListRepository
 import com.orienteering.startref.data.settings.AppSettings
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -64,21 +66,35 @@ class StartListViewModel @Inject constructor(
     val settings: StateFlow<AppSettings> = settingsDataStore.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings.DEFAULT)
 
-    val availableClasses: StateFlow<List<ClassEntry>> = repository.observeClasses()
+    val availableClasses: StateFlow<List<ClassEntry>> = combine(
+        repository.observeLookupClasses(),
+        repository.observeClasses()
+    ) { lookupClasses, runnerClasses ->
+        if (lookupClasses.isNotEmpty()) lookupClasses else runnerClasses
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val availableClubs: StateFlow<List<ClubEntry>> = repository.observeLookupClubs()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val syncCounts: StateFlow<Pair<Int, Int>> = repository.observeSyncCounts()
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0 to 0)
 
+    val isSyncing: StateFlow<Boolean> = syncManager.isSyncing
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val currentTimeMinute = _currentTimeMs
+        .map { it / 60_000L }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, System.currentTimeMillis() / 60_000L)
+
     val startListItems: StateFlow<List<StartListItem>> = combine(
         repository.observeRunners(),
-        _currentTimeMs,
+        currentTimeMinute,
         settings
-    ) { runners, timeMs, appSettings ->
+    ) { runners, timeMinute, appSettings ->
         val s = appSettings
-        val adjustedMs = timeMs - (s.lateStartMinutes * 60_000L) - (s.prestartMinutes * 60_000L)
-        val tod = ((adjustedMs / 60_000).toInt() % (24 * 60) + 24 * 60) % (24 * 60)
-        buildItems(runners, tod)
+        val adjustedMinute = timeMinute - s.lateStartMinutes - s.prestartMinutes
+        val tod = ((adjustedMinute.toInt() % (24 * 60)) + (24 * 60)) % (24 * 60)
+        buildItems(runners.filter { it.startPlace == s.startPlace }, tod)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private var lastAlertMinute = -1L

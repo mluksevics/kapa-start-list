@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -21,6 +22,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
@@ -65,8 +67,10 @@ fun StartListScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val availableClasses by viewModel.availableClasses.collectAsStateWithLifecycle()
+    val availableClubs by viewModel.availableClubs.collectAsStateWithLifecycle()
     val autoScrollEnabled by viewModel.autoScrollEnabled.collectAsStateWithLifecycle()
     val syncCounts by viewModel.syncCounts.collectAsStateWithLifecycle()
+    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -90,70 +94,75 @@ fun StartListScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    // Sync counter with white circle background
-                    val (sent, total) = syncCounts
-                    Box(
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .size(40.dp)
-                            .background(Color.White, shape = CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "$sent/$total",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (sent < total) Color(0xFFE65100) else Color(0xFF2E7D32),
-                            maxLines = 1
-                        )
-                    }
-                },
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            clockFormatter.format(Instant.ofEpochMilli(currentTimeMs)),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(settings.headerText, style = MaterialTheme.typography.titleMedium)
-                    }
-                },
-                actions = {
-                    // Auto-scroll toggle
-                    IconButton(onClick = { viewModel.toggleAutoScroll() }) {
-                        Icon(
-                            imageVector = if (autoScrollEnabled) Icons.Default.GpsFixed else Icons.Default.GpsNotFixed,
-                            contentDescription = if (autoScrollEnabled) "Auto-scroll ON" else "Auto-scroll OFF",
-                            tint = if (autoScrollEnabled) Color(0xFF76FF03) else MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-
-                    // Manual scroll to NOW
-                    TextButton(onClick = {
-                        scope.launch {
-                            val idx = viewModel.currentHeaderIndex()
-                            if (idx >= 0) listState.animateScrollToItem(idx)
+            Column {
+                TopAppBar(
+                    navigationIcon = {
+                        // Sync counter with white circle background
+                        val (sent, total) = syncCounts
+                        Box(
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .size(40.dp)
+                                .background(Color.White, shape = CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "$sent/$total",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (sent < total) Color(0xFFE65100) else Color(0xFF2E7D32),
+                                maxLines = 1
+                            )
                         }
-                    }) {
-                        Text(
-                            "Scroll\nto NOW",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
+                    },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                clockFormatter.format(Instant.ofEpochMilli(currentTimeMs)),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(settings.headerText, style = MaterialTheme.typography.titleMedium)
+                        }
+                    },
+                    actions = {
+                        // Auto-scroll toggle
+                        IconButton(onClick = { viewModel.toggleAutoScroll() }) {
+                            Icon(
+                                imageVector = if (autoScrollEnabled) Icons.Default.GpsFixed else Icons.Default.GpsNotFixed,
+                                contentDescription = if (autoScrollEnabled) "Auto-scroll ON" else "Auto-scroll OFF",
+                                tint = if (autoScrollEnabled) Color(0xFF76FF03) else MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
 
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                        // Manual scroll to NOW
+                        TextButton(onClick = {
+                            scope.launch {
+                                val idx = viewModel.currentHeaderIndex()
+                                if (idx >= 0) listState.animateScrollToItem(idx)
+                            }
+                        }) {
+                            Text(
+                                "Scroll\nto NOW",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+
+                        IconButton(onClick = onNavigateToSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 )
-            )
+                if (isSyncing) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
         },
         snackbarHost = {
             SnackbarHost(snackbarHostState) { data ->
@@ -168,7 +177,7 @@ fun StartListScreen(
         ) {
             if (items.isEmpty() && !isLoading) {
                 Text(
-                    "No start list loaded. Go to Settings → Reload startlist.",
+                    "No start list loaded. Go to Settings -> Force Pull all.",
                     modifier = Modifier
                         .align(Alignment.Center)
                         .padding(32.dp),
@@ -188,15 +197,17 @@ fun StartListScreen(
                             }
                         }
                     ) { item ->
-                        when (item) {
-                            is StartListItem.Header -> TimeDivider(item.timeMinute, item.isCurrent, settings.rowFontSize.sp)
-                            is StartListItem.Row -> RunnerRow(
-                                runner = item.runner,
-                                onCheckIn = { viewModel.markStarted(item.runner.startNumber) },
-                                onDns = { viewModel.toggleDns(item.runner.startNumber) },
-                                onEdit = { viewModel.selectRunner(item.runner) },
-                                fontSize = settings.rowFontSize.sp
-                            )
+                        Box {
+                            when (item) {
+                                is StartListItem.Header -> TimeDivider(item.timeMinute, item.isCurrent, settings.rowFontSize.sp)
+                                is StartListItem.Row -> RunnerRow(
+                                    runner = item.runner,
+                                    onCheckIn = { viewModel.markStarted(item.runner.startNumber) },
+                                    onDns = { viewModel.toggleDns(item.runner.startNumber) },
+                                    onEdit = { viewModel.selectRunner(item.runner) },
+                                    fontSize = settings.rowFontSize.sp
+                                )
+                            }
                         }
                     }
                 }
@@ -212,6 +223,7 @@ fun StartListScreen(
         EditUserDialog(
             runner = runner,
             availableClasses = availableClasses,
+            availableClubs = availableClubs,
             currentTimeMs = currentTimeMs,
             onDismiss = { viewModel.selectRunner(null) },
             onSave = { updated -> viewModel.updateRunner(updated) }

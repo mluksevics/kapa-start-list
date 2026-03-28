@@ -140,8 +140,8 @@ class ApiClient(
                 }
                 GetRunnersResult(serverTimeUtc, runners)
             }
-        } catch (_: Exception) {
-            null
+        } catch (e: Exception) {
+            throw IllegalStateException("getRunners failed: ${e.javaClass.simpleName}: ${e.message}", e)
         }
     }
 

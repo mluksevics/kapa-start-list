@@ -6,6 +6,8 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import com.orienteering.startref.data.local.ClassEntry
+import com.orienteering.startref.data.local.ClubEntry
+import com.orienteering.startref.data.local.LookupDao
 import com.orienteering.startref.data.local.PendingSyncDao
 import com.orienteering.startref.data.local.RunnerDao
 import com.orienteering.startref.data.local.entity.PendingSyncEntity
@@ -17,6 +19,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import org.json.JSONObject
 import java.io.File
 import java.time.Instant
@@ -28,6 +31,7 @@ import javax.inject.Singleton
 @Singleton
 class StartListRepository @Inject constructor(
     private val runnerDao: RunnerDao,
+    private val lookupDao: LookupDao,
     private val pendingSyncDao: PendingSyncDao,
     private val syncManager: SyncManager,
     private val apiClient: ApiClient,
@@ -38,6 +42,12 @@ class StartListRepository @Inject constructor(
 
     fun observeClasses(): Flow<List<ClassEntry>> = runnerDao.observeDistinctClasses()
 
+    fun observeLookupClasses(): Flow<List<ClassEntry>> = lookupDao.observeAllClasses()
+        .map { classes -> classes.map { ClassEntry(classId = it.id, className = it.name) } }
+
+    fun observeLookupClubs(): Flow<List<ClubEntry>> = lookupDao.observeAllClubs()
+        .map { clubs -> clubs.map { ClubEntry(clubId = it.id, clubName = it.name) } }
+
     fun observeSyncCounts(): Flow<Pair<Int, Int>> = combine(
         pendingSyncDao.observeSentCount(),
         pendingSyncDao.observeTotalCount()
@@ -45,6 +55,14 @@ class StartListRepository @Inject constructor(
 
     suspend fun reloadFromApi() {
         syncManager.fullSync()
+    }
+
+    suspend fun pullClasses() {
+        syncManager.pullClassesOnly()
+    }
+
+    suspend fun pullClubs() {
+        syncManager.pullClubsOnly()
     }
 
     /** Sets a runner's status to Started (2) and queues a PATCH. */

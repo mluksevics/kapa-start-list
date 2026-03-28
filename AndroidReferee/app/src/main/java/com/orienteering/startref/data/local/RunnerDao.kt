@@ -14,6 +14,11 @@ data class ClassEntry(
     @ColumnInfo(name = "className") val className: String
 )
 
+data class ClubEntry(
+    val clubId: Int,
+    val clubName: String
+)
+
 @Dao
 interface RunnerDao {
 
@@ -41,8 +46,14 @@ interface RunnerDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(runner: RunnerEntity)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(runners: List<RunnerEntity>)
+
     @Update
     suspend fun update(runner: RunnerEntity)
+
+    @Update
+    suspend fun updateAll(runners: List<RunnerEntity>)
 
     @Query("DELETE FROM runners")
     suspend fun deleteAll()

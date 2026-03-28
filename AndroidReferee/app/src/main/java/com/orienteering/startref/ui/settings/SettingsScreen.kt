@@ -22,12 +22,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -56,11 +56,13 @@ fun SettingsScreen(
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showClearConfirm by remember { mutableStateOf(false) }
+    var showFinalClearConfirm by remember { mutableStateOf(false) }
 
     // Local form state — initialized once from the first real DataStore emission
     var apiBaseUrl by rememberSaveable { mutableStateOf("") }
     var apiKey by rememberSaveable { mutableStateOf("") }
     var headerText by rememberSaveable { mutableStateOf("") }
+    var pollIntervalStr by rememberSaveable { mutableStateOf("") }
     var prestartStr by rememberSaveable { mutableStateOf("") }
     var lateStartStr by rememberSaveable { mutableStateOf("") }
     // NOT rememberSaveable — must reset to false on every navigation to this screen
@@ -72,6 +74,7 @@ fun SettingsScreen(
             apiBaseUrl = s.apiBaseUrl
             apiKey = s.apiKey
             headerText = s.headerText
+            pollIntervalStr = s.pollIntervalSeconds.toString()
             prestartStr = s.prestartMinutes.toString()
             lateStartStr = s.lateStartMinutes.toString()
             fieldsReady = true
@@ -89,14 +92,37 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
             title = { Text("Clear Cache") },
-            text = { Text("This will delete all runners and pending sync items. Cannot be undone.") },
+            text = { Text("This will delete all runners and pending sync items.") },
             confirmButton = {
                 Button(
-                    onClick = { showClearConfirm = false; viewModel.clearCache() },
+                    onClick = {
+                        showClearConfirm = false
+                        showFinalClearConfirm = true
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Clear") }
+                ) { Text("Continue") }
             },
             dismissButton = { TextButton(onClick = { showClearConfirm = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showFinalClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showFinalClearConfirm = false },
+            title = { Text("Final Confirmation") },
+            text = { Text("Are you absolutely sure? This cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showFinalClearConfirm = false
+                        viewModel.clearCache()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Yes, clear now") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFinalClearConfirm = false }) { Text("Cancel") }
+            }
         )
     }
 
@@ -148,13 +174,33 @@ fun SettingsScreen(
                     enabled = !isLoading
                 ) {
                     if (isLoading) CircularProgressIndicator()
-                    else Text("Reload startlist")
+                    else Text("Force Pull all")
                 }
                 Button(
                     onClick = { viewModel.forcePush() },
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Force Push updates")
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { viewModel.pullClasses() },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isLoading
+                ) {
+                    Text("Pull classes")
+                }
+                Button(
+                    onClick = { viewModel.pullClubs() },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isLoading
+                ) {
+                    Text("Pull clubs")
                 }
             }
 
@@ -183,6 +229,40 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+            }
+
+            SettingField(label = "Pull interval (seconds)") {
+                OutlinedTextField(
+                    value = pollIntervalStr,
+                    onValueChange = {
+                        pollIntervalStr = it
+                        it.toIntOrNull()?.takeIf { v -> v >= 5 }?.let { v ->
+                            viewModel.updatePollIntervalSeconds(v)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+            }
+
+            SettingField(label = "Start Place") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    listOf(1, 2, 3).forEach { place ->
+                        Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = settings.startPlace == place,
+                                onClick = { viewModel.updateStartPlace(place) }
+                            )
+                            Text(text = place.toString())
+                        }
+                    }
+                }
             }
 
             SettingField(label = "Prestart (minutes, e.g. -2)") {
@@ -240,15 +320,6 @@ fun SettingsScreen(
                     )
                     Text("28", style = MaterialTheme.typography.labelSmall)
                 }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            OutlinedButton(
-                onClick = { viewModel.exportToCsv() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Export to CSV (Downloads folder)")
             }
 
             Button(

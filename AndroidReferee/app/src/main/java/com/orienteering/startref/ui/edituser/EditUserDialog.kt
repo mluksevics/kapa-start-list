@@ -36,6 +36,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.orienteering.startref.data.local.ClassEntry
+import com.orienteering.startref.data.local.ClubEntry
 import com.orienteering.startref.data.local.entity.RunnerEntity
 import java.time.Instant
 import java.time.LocalDateTime
@@ -46,6 +47,7 @@ import java.time.ZoneId
 fun EditUserDialog(
     runner: RunnerEntity,
     availableClasses: List<ClassEntry>,
+    availableClubs: List<ClubEntry>,
     currentTimeMs: Long,
     onDismiss: () -> Unit,
     onSave: (RunnerEntity) -> Unit
@@ -60,6 +62,8 @@ fun EditUserDialog(
     var siCard by remember { mutableStateOf(runner.siCard) }
     var selectedClassEntry by remember { mutableStateOf(ClassEntry(runner.classId, runner.className)) }
     var classDropdownExpanded by remember { mutableStateOf(false) }
+    var selectedClubEntry by remember { mutableStateOf(ClubEntry(runner.clubId, runner.clubName)) }
+    var clubDropdownExpanded by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
 
     val timePickerState = rememberTimePickerState(
@@ -67,12 +71,6 @@ fun EditUserDialog(
         initialMinute = initialDateTime.minute,
         is24Hour = true
     )
-
-    val classGroup = classGroupOf(runner.className)
-    val isClassEditable = classGroup != null
-    val filteredClasses = if (classGroup != null)
-        availableClasses.filter { classGroupOf(it.className) == classGroup }
-    else emptyList()
 
     fun nowPlusMinutes(minutes: Int): Long {
         val now = currentTimeMs
@@ -98,6 +96,8 @@ fun EditUserDialog(
             siCard = siCard.trim(),
             classId = selectedClassEntry.classId,
             className = selectedClassEntry.className,
+            clubId = selectedClubEntry.clubId,
+            clubName = selectedClubEntry.clubName,
             startTime = newStartTime
         )
     }
@@ -154,45 +154,64 @@ fun EditUserDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
                 )
 
-                if (isClassEditable) {
-                    ExposedDropdownMenuBox(
-                        expanded = classDropdownExpanded,
-                        onExpandedChange = { classDropdownExpanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = selectedClassEntry.className,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Class") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(classDropdownExpanded) },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = classDropdownExpanded,
-                            onDismissRequest = { classDropdownExpanded = false }
-                        ) {
-                            filteredClasses.forEach { entry ->
-                                DropdownMenuItem(
-                                    text = { Text(entry.className) },
-                                    onClick = {
-                                        selectedClassEntry = entry
-                                        classDropdownExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                } else {
+                ExposedDropdownMenuBox(
+                    expanded = classDropdownExpanded,
+                    onExpandedChange = { classDropdownExpanded = it }
+                ) {
                     OutlinedTextField(
                         value = selectedClassEntry.className,
                         onValueChange = {},
                         readOnly = true,
-                        enabled = false,
                         label = { Text("Class") },
-                        modifier = Modifier.fillMaxWidth()
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(classDropdownExpanded) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
                     )
+                    ExposedDropdownMenu(
+                        expanded = classDropdownExpanded,
+                        onDismissRequest = { classDropdownExpanded = false }
+                    ) {
+                        availableClasses.forEach { entry ->
+                            DropdownMenuItem(
+                                text = { Text(entry.className) },
+                                onClick = {
+                                    selectedClassEntry = entry
+                                    classDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                ExposedDropdownMenuBox(
+                    expanded = clubDropdownExpanded,
+                    onExpandedChange = { clubDropdownExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedClubEntry.clubName,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Club") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clubDropdownExpanded) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = clubDropdownExpanded,
+                        onDismissRequest = { clubDropdownExpanded = false }
+                    ) {
+                        availableClubs.forEach { entry ->
+                            DropdownMenuItem(
+                                text = { Text(entry.clubName) },
+                                onClick = {
+                                    selectedClubEntry = entry
+                                    clubDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -256,7 +275,7 @@ fun EditUserDialog(
  */
 private fun classGroupOf(className: String): String? = when {
     className.startsWith("DIR", ignoreCase = true) ||
-    className.startsWith("Open", ignoreCase = true) -> "diropen"
+        className.startsWith("Open", ignoreCase = true) -> "diropen"
 
     isYouth8Class(className) -> "youth8"
 
@@ -277,3 +296,4 @@ private fun isYouth8Class(className: String): Boolean {
     }
     return false
 }
+

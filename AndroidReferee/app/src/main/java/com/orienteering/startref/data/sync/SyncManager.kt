@@ -1,26 +1,31 @@
 package com.orienteering.startref.data.sync
 
+import com.orienteering.startref.data.local.LookupDao
 import com.orienteering.startref.data.local.RunnerDao
+import com.orienteering.startref.data.local.entity.ClassLookupEntity
+import com.orienteering.startref.data.local.entity.ClubLookupEntity
 import com.orienteering.startref.data.local.entity.RunnerEntity
 import com.orienteering.startref.data.remote.ApiClient
 import com.orienteering.startref.data.remote.RunnerDto
 import com.orienteering.startref.data.settings.SettingsDataStore
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val POLL_INTERVAL_MS = 30_000L
-
 @Singleton
 class SyncManager @Inject constructor(
     private val runnerDao: RunnerDao,
+    private val lookupDao: LookupDao,
     private val apiClient: ApiClient,
     private val settingsDataStore: SettingsDataStore
 ) {
@@ -32,52 +37,121 @@ class SyncManager @Inject constructor(
 
     private val _syncDeltas = MutableSharedFlow<SyncDelta>(extraBufferCapacity = 16)
     val syncDeltas: SharedFlow<SyncDelta> = _syncDeltas.asSharedFlow()
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
     /** Runs indefinitely — launch in a long-lived coroutine scope (e.g. Application scope). */
     suspend fun startPolling() {
         while (true) {
             runCatching { poll() }
-            delay(POLL_INTERVAL_MS)
+            val intervalMs = settingsDataStore.settings.first().pollIntervalSeconds
+                .coerceAtLeast(5)
+                .times(1000L)
+            delay(intervalMs)
         }
     }
 
     suspend fun poll() {
-        val settings = settingsDataStore.settings.first()
-        val changedSince = settings.lastServerTimeUtc.takeIf { it > 0 }
-        val result = apiClient.getRunners(settings.competitionDate, changedSince, settings) ?: return
+        _isSyncing.value = true
+        try {
+            val settings = settingsDataStore.settings.first()
+            val changedSince = settings.lastServerTimeUtc.takeIf { it > 0 }
+            val result = apiClient.getRunners(settings.competitionDate, changedSince, settings) ?: return
 
-        var runnersChanged = 0
-        result.runners.forEach { dto -> mergeRunner(dto, settings.competitionDate) }
-        runnersChanged = result.runners.size
-        val classNamesChanged = syncClassLookups(settings)
-        val clubNamesChanged = syncClubLookups(settings)
-        settingsDataStore.updateLastServerTimeUtc(result.serverTimeUtc)
-        if (runnersChanged > 0 || classNamesChanged > 0 || clubNamesChanged > 0) {
-            _syncDeltas.tryEmit(
-                SyncDelta(
-                    runnersChanged = runnersChanged,
-                    classNamesChanged = classNamesChanged,
-                    clubNamesChanged = clubNamesChanged
+            var runnersChanged = 0
+            result.runners.forEach { dto -> mergeRunner(dto, settings.competitionDate) }
+            runnersChanged = result.runners.size
+            val classNamesChanged = syncClassLookups(settings)
+            val clubNamesChanged = syncClubLookups(settings)
+            settingsDataStore.updateLastServerTimeUtc(result.serverTimeUtc)
+            if (runnersChanged > 0 || classNamesChanged > 0 || clubNamesChanged > 0) {
+                _syncDeltas.tryEmit(
+                    SyncDelta(
+                        runnersChanged = runnersChanged,
+                        classNamesChanged = classNamesChanged,
+                        clubNamesChanged = clubNamesChanged
+                    )
                 )
-            )
+            }
+        } finally {
+            _isSyncing.value = false
         }
     }
 
     suspend fun fullSync() {
-        val settings = settingsDataStore.settings.first()
-        val result = apiClient.getRunners(settings.competitionDate, null, settings) ?: return
+        _isSyncing.value = true
+        try {
+            val settings = settingsDataStore.settings.first()
+            val result = apiClient.getRunners(settings.competitionDate, null, settings)
+                ?: throw IllegalStateException("No response from API – check API URL and competition date in Settings")
 
-        result.runners.forEach { dto -> mergeRunner(dto, settings.competitionDate) }
-        val classNamesChanged = syncClassLookups(settings)
-        val clubNamesChanged = syncClubLookups(settings)
-        settingsDataStore.updateLastServerTimeUtc(result.serverTimeUtc)
-        _syncDeltas.tryEmit(
-            SyncDelta(
-                runnersChanged = result.runners.size,
-                classNamesChanged = classNamesChanged,
-                clubNamesChanged = clubNamesChanged
+            // Load all existing runners in one query, then split incoming into inserts/updates
+            val existingMap = runnerDao.getAll().associateBy { it.startNumber }
+            val toInsert = mutableListOf<RunnerEntity>()
+            val toUpdate = mutableListOf<RunnerEntity>()
+
+            result.runners.forEach { dto ->
+                val existing = existingMap[dto.startNumber]
+                if (existing == null) {
+                    toInsert.add(dto.toEntity(settings.competitionDate))
+                } else {
+                    val resolvedStatus = resolveStatus(incoming = dto.statusId, current = existing.statusId)
+                    val updated = existing.copy(
+                        siCard = dto.siChipNo ?: existing.siCard,
+                        name = dto.name,
+                        surname = dto.surname,
+                        classId = dto.classId,
+                        className = dto.className,
+                        clubId = dto.clubId,
+                        clubName = dto.clubName,
+                        country = dto.country ?: existing.country,
+                        startPlace = dto.startPlace,
+                        startTime = dto.startTime?.let { hhmmssToEpochMs(it, settings.competitionDate) } ?: existing.startTime,
+                        statusId = resolvedStatus,
+                        checkedInAt = if (resolvedStatus == 2 && existing.statusId != 2) System.currentTimeMillis() else existing.checkedInAt,
+                        lastModifiedAt = dto.lastModifiedUtc,
+                        lastModifiedBy = dto.lastModifiedBy
+                    )
+                    if (updated != existing) toUpdate.add(updated)
+                }
+            }
+
+            if (toInsert.isNotEmpty()) runnerDao.insertAll(toInsert)
+            if (toUpdate.isNotEmpty()) runnerDao.updateAll(toUpdate)
+
+            val classNamesChanged = syncClassLookups(settings)
+            val clubNamesChanged = syncClubLookups(settings)
+            settingsDataStore.updateLastServerTimeUtc(result.serverTimeUtc)
+            _syncDeltas.tryEmit(
+                SyncDelta(
+                    runnersChanged = toInsert.size + toUpdate.size,
+                    classNamesChanged = classNamesChanged,
+                    clubNamesChanged = clubNamesChanged
+                )
             )
-        )
+        } finally {
+            _isSyncing.value = false
+        }
+    }
+
+    suspend fun pullClassesOnly(): Int {
+        _isSyncing.value = true
+        return try {
+            val settings = settingsDataStore.settings.first()
+            syncClassLookups(settings)
+        } finally {
+            _isSyncing.value = false
+        }
+    }
+
+    suspend fun pullClubsOnly(): Int {
+        _isSyncing.value = true
+        return try {
+            val settings = settingsDataStore.settings.first()
+            syncClubLookups(settings)
+        } finally {
+            _isSyncing.value = false
+        }
     }
 
     private suspend fun mergeRunner(dto: RunnerDto, competitionDate: String) {
@@ -154,6 +228,10 @@ class SyncManager @Inject constructor(
     private suspend fun syncClassLookups(settings: com.orienteering.startref.data.settings.AppSettings): Int {
         val classes = apiClient.getClasses(settings)
         if (classes.isEmpty()) return 0
+        lookupDao.deleteAllClasses()
+        lookupDao.insertClasses(
+            classes.map { item -> ClassLookupEntity(id = item.id, name = item.name) }
+        )
         var changed = 0
         classes.forEach { item ->
             changed += runnerDao.updateClassNameByClassId(item.id, item.name)
@@ -164,6 +242,10 @@ class SyncManager @Inject constructor(
     private suspend fun syncClubLookups(settings: com.orienteering.startref.data.settings.AppSettings): Int {
         val clubs = apiClient.getClubs(settings)
         if (clubs.isEmpty()) return 0
+        lookupDao.deleteAllClubs()
+        lookupDao.insertClubs(
+            clubs.map { item -> ClubLookupEntity(id = item.id, name = item.name) }
+        )
         var changed = 0
         clubs.forEach { item ->
             changed += runnerDao.updateClubNameByClubId(item.id, item.name)

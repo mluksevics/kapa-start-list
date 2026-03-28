@@ -5,12 +5,16 @@ import androidx.lifecycle.viewModelScope
 import com.orienteering.startref.data.local.RunnerDao
 import com.orienteering.startref.data.local.entity.RunnerEntity
 import com.orienteering.startref.data.repository.StartListRepository
+import com.orienteering.startref.data.settings.AppSettings
+import com.orienteering.startref.data.settings.SettingsDataStore
 import com.orienteering.startref.data.si.SiStationReader
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -30,11 +34,14 @@ data class GateUiState(
 class GateViewModel @Inject constructor(
     private val runnerDao: RunnerDao,
     private val repository: StartListRepository,
+    settingsDataStore: SettingsDataStore,
     private val siReader: SiStationReader
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(GateUiState())
     val uiState: StateFlow<GateUiState> = _uiState.asStateFlow()
+    private val settings: StateFlow<AppSettings> = settingsDataStore.settings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings.DEFAULT)
 
     init {
         // Clock tick
@@ -100,7 +107,7 @@ class GateViewModel @Inject constructor(
     private suspend fun handleCardRead(siCard: String) {
         val now = System.currentTimeMillis()
         val currentTod = (now / 60_000).toInt() % (24 * 60)
-        val allRunners = runnerDao.getAll()
+        val allRunners = runnerDao.getAll().filter { it.startPlace == settings.value.startPlace }
 
         // Find runner by SI card
         val matchedRunner = allRunners.firstOrNull { it.siCard == siCard }
@@ -151,7 +158,8 @@ class GateViewModel @Inject constructor(
 
     private suspend fun updateCurrentMinuteRunners(nowMs: Long) {
         val currentTod = (nowMs / 60_000).toInt() % (24 * 60)
-        val all = runnerDao.getAll()
+        val selectedStartPlace = settings.value.startPlace
+        val all = runnerDao.getAll().filter { it.startPlace == selectedStartPlace }
         val current = all.filter { r ->
             (r.startTime / 60_000).toInt() % (24 * 60) == currentTod
         }.sortedBy { it.startNumber }

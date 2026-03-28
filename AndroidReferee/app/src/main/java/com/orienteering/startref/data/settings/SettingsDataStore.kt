@@ -26,6 +26,8 @@ class SettingsDataStore @Inject constructor(
     private object Keys {
         val API_BASE_URL = stringPreferencesKey("api_base_url")
         val API_KEY = stringPreferencesKey("api_key")
+        val POLL_INTERVAL_SECONDS = intPreferencesKey("poll_interval_seconds")
+        val START_PLACE = intPreferencesKey("start_place")
         val HEADER_TEXT = stringPreferencesKey("header_text")
         val PRESTART_MINUTES = intPreferencesKey("prestart_minutes")
         val LATE_START_MINUTES = intPreferencesKey("late_start_minutes")
@@ -41,6 +43,8 @@ class SettingsDataStore @Inject constructor(
         AppSettings(
             apiBaseUrl = prefs[Keys.API_BASE_URL] ?: AppSettings.DEFAULT.apiBaseUrl,
             apiKey = prefs[Keys.API_KEY] ?: AppSettings.DEFAULT.apiKey,
+            pollIntervalSeconds = prefs[Keys.POLL_INTERVAL_SECONDS] ?: AppSettings.DEFAULT.pollIntervalSeconds,
+            startPlace = prefs[Keys.START_PLACE] ?: AppSettings.DEFAULT.startPlace,
             headerText = prefs[Keys.HEADER_TEXT] ?: AppSettings.DEFAULT.headerText,
             prestartMinutes = prefs[Keys.PRESTART_MINUTES] ?: AppSettings.DEFAULT.prestartMinutes,
             lateStartMinutes = prefs[Keys.LATE_START_MINUTES] ?: AppSettings.DEFAULT.lateStartMinutes,
@@ -55,6 +59,8 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun updateApiBaseUrl(value: String) = context.dataStore.edit { it[Keys.API_BASE_URL] = value }
     suspend fun updateApiKey(value: String) = context.dataStore.edit { it[Keys.API_KEY] = value }
+    suspend fun updatePollIntervalSeconds(value: Int) = context.dataStore.edit { it[Keys.POLL_INTERVAL_SECONDS] = value }
+    suspend fun updateStartPlace(value: Int) = context.dataStore.edit { it[Keys.START_PLACE] = value }
     suspend fun updateHeaderText(value: String) = context.dataStore.edit { it[Keys.HEADER_TEXT] = value }
     suspend fun updatePrestartMinutes(value: Int) = context.dataStore.edit { it[Keys.PRESTART_MINUTES] = value }
     suspend fun updateLateStartMinutes(value: Int) = context.dataStore.edit { it[Keys.LATE_START_MINUTES] = value }

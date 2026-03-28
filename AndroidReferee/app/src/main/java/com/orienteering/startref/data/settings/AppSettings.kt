@@ -5,6 +5,8 @@ import java.time.LocalDate
 data class AppSettings(
     val apiBaseUrl: String,
     val apiKey: String,
+    val pollIntervalSeconds: Int,
+    val startPlace: Int,
     val headerText: String,
     val prestartMinutes: Int,
     val lateStartMinutes: Int,
@@ -18,8 +20,10 @@ data class AppSettings(
     companion object {
         const val DEFAULT_FONT_SIZE = 16f
         val DEFAULT = AppSettings(
-            apiBaseUrl = "",
-            apiKey = "",
+            apiBaseUrl = "https://startref.azurewebsites.net/",
+            apiKey = "marcisTestKey",
+            pollIntervalSeconds = 30,
+            startPlace = 1,
             headerText = "Orienteering Start",
             prestartMinutes = -2,
             lateStartMinutes = 0,

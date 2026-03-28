@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.work.WorkManager
 import com.orienteering.startref.data.local.AppDatabase
+import com.orienteering.startref.data.local.LookupDao
 import com.orienteering.startref.data.local.PendingSyncDao
 import com.orienteering.startref.data.local.RunnerDao
 import com.orienteering.startref.data.remote.ApiClient
@@ -37,7 +38,13 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "startref.db")
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
+            .addMigrations(
+                AppDatabase.MIGRATION_1_2,
+                AppDatabase.MIGRATION_2_3,
+                AppDatabase.MIGRATION_3_4,
+                AppDatabase.MIGRATION_4_5,
+                AppDatabase.MIGRATION_5_6
+            )
             .build()
 
     @Provides
@@ -45,6 +52,9 @@ object AppModule {
 
     @Provides
     fun providePendingSyncDao(db: AppDatabase): PendingSyncDao = db.pendingSyncDao()
+
+    @Provides
+    fun provideLookupDao(db: AppDatabase): LookupDao = db.lookupDao()
 
     @Provides
     @Singleton

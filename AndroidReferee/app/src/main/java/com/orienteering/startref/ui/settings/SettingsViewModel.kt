@@ -42,6 +42,8 @@ class SettingsViewModel @Inject constructor(
 
     fun updateApiBaseUrl(value: String) = viewModelScope.launch { settingsDataStore.updateApiBaseUrl(value) }
     fun updateApiKey(value: String) = viewModelScope.launch { settingsDataStore.updateApiKey(value) }
+    fun updatePollIntervalSeconds(value: Int) = viewModelScope.launch { settingsDataStore.updatePollIntervalSeconds(value) }
+    fun updateStartPlace(value: Int) = viewModelScope.launch { settingsDataStore.updateStartPlace(value) }
     fun updateHeaderText(value: String) = viewModelScope.launch { settingsDataStore.updateHeaderText(value) }
     fun updatePrestartMinutes(value: Int) = viewModelScope.launch { settingsDataStore.updatePrestartMinutes(value) }
     fun updateLateStartMinutes(value: Int) = viewModelScope.launch { settingsDataStore.updateLateStartMinutes(value) }
@@ -67,6 +69,34 @@ class SettingsViewModel @Inject constructor(
         val request = OneTimeWorkRequestBuilder<PendingSyncWorker>().build()
         workManager.enqueueUniqueWork("forcePush", ExistingWorkPolicy.REPLACE, request)
         _message.value = "Pushing pending updates..."
+    }
+
+    fun pullClasses() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                repository.pullClasses()
+                _message.value = "Classes pulled"
+            } catch (e: Exception) {
+                _message.value = "Classes pull failed: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun pullClubs() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                repository.pullClubs()
+                _message.value = "Clubs pulled"
+            } catch (e: Exception) {
+                _message.value = "Clubs pull failed: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
     }
 
     fun exportToCsv() {
