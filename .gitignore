@@ -11,6 +11,7 @@ appsettings.Development.json
 settings.json
 sync_log.txt
 *.nupkg
+DbBridge/
 
 # ── Android ──────────────────────────────────────────────────────────────────
 *.iml
