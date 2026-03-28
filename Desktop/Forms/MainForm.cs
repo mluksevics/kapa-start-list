@@ -213,7 +213,7 @@ public partial class MainForm : Form
         _pushActionsEnabled = enabled;
 
         if (enabled && !previous)
-            AppendLog($"{DateTime.Now:HH:mm:ss} DBISAM opened successfully: {_settings.DbIsamPath}");
+            AppendLog($"{DateTime.Now:HH:mm:ss} DBISAM opened successfully.");
 
         if (!enabled)
             _syncService.Stop();
