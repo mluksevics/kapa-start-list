@@ -6,6 +6,14 @@ using StartRef.Api;
 using StartRef.Api.Data;
 using StartRef.Api.Endpoints;
 
+const int SqlDatabaseNotCurrentlyAvailable = 40613;
+const int SqlConnectionTimeout = -2;
+const int SqlResourceLimitReached = 10928;
+const int SqlResourceLimitApproaching = 10929;
+const int SqlServiceEncounteredError = 40197;
+const int SqlServiceBusy = 40501;
+const int SqlCannotOpenDatabase = 4060;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -16,7 +24,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
             sqlOptions.EnableRetryOnFailure(
                 maxRetryCount: 10,
                 maxRetryDelay: TimeSpan.FromSeconds(30),
-                errorNumbersToAdd: new[] { 40613 });
+                errorNumbersToAdd: new[] { SqlDatabaseNotCurrentlyAvailable });
         }));
 
 builder.Services.AddResponseCompression(options =>
@@ -71,7 +79,14 @@ static bool IsTransientSqlStartupError(Exception ex)
 {
     if (ex is SqlException sqlException)
     {
-        return sqlException.Number is 40613 or -2 or 10928 or 10929 or 40197 or 40501 or 4060;
+        return sqlException.Number is
+            SqlDatabaseNotCurrentlyAvailable or
+            SqlConnectionTimeout or
+            SqlResourceLimitReached or
+            SqlResourceLimitApproaching or
+            SqlServiceEncounteredError or
+            SqlServiceBusy or
+            SqlCannotOpenDatabase;
     }
 
     if (ex.InnerException is not null)
