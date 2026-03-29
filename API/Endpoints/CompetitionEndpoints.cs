@@ -50,8 +50,6 @@ public static class CompetitionEndpoints
             .Distinct()
             .ToListAsync();
 
-        await using var tx = await db.Database.BeginTransactionAsync();
-
         var deletedRunners = await db.Runners
             .Where(r => r.CompetitionDate == competitionDate)
             .ExecuteDeleteAsync();
@@ -63,20 +61,28 @@ public static class CompetitionEndpoints
         var deletedClasses = 0;
         if (classIdsToDelete.Count > 0)
         {
-            deletedClasses = await db.Classes
-                .Where(c => classIdsToDelete.Contains(c.Id) && !db.Runners.Any(r => r.ClassId == c.Id))
-                .ExecuteDeleteAsync();
+            foreach (var classId in classIdsToDelete)
+            {
+                if (await db.Runners.AsNoTracking().AnyAsync(r => r.ClassId == classId))
+                    continue;
+                deletedClasses += await db.Classes
+                    .Where(c => c.Id == classId)
+                    .ExecuteDeleteAsync();
+            }
         }
 
         var deletedClubs = 0;
         if (clubIdsToDelete.Count > 0)
         {
-            deletedClubs = await db.Clubs
-                .Where(c => clubIdsToDelete.Contains(c.Id) && !db.Runners.Any(r => r.ClubId == c.Id))
-                .ExecuteDeleteAsync();
+            foreach (var clubId in clubIdsToDelete)
+            {
+                if (await db.Runners.AsNoTracking().AnyAsync(r => r.ClubId == clubId))
+                    continue;
+                deletedClubs += await db.Clubs
+                    .Where(c => c.Id == clubId)
+                    .ExecuteDeleteAsync();
+            }
         }
-
-        await tx.CommitAsync();
 
         return Results.Ok(new
         {

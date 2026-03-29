@@ -16,6 +16,7 @@ public partial class MainForm : Form
     private System.Windows.Forms.Timer? _runningStatusTimer;
     private DateTimeOffset _runningStartedAtUtc;
     private bool _pushActionsEnabled;
+    private bool _suppressDbDateChange;
 
     private sealed record EtapItem(int DayNo, string Name, string Date)
     {
@@ -140,7 +141,7 @@ public partial class MainForm : Form
                 { savedIndex = i; break; }
             }
             cmbDay.SelectedIndex = savedIndex >= 0 ? savedIndex : 0;
-            lblDayNote.Text = $"Competition does not have a stage with DB date ({selectedDate:yyyy-MM-dd}).";
+            lblDayNote.Text = $"Competition does not have a stage with API date ({selectedDate:yyyy-MM-dd}).";
         }
     }
 
@@ -165,13 +166,41 @@ public partial class MainForm : Form
 
     private void dtpDbDate_ValueChanged(object sender, EventArgs e)
     {
+        if (_suppressDbDateChange) return;
         var selectedDate = DateOnly.FromDateTime(dtpDbDate.Value.Date);
         var previousDate = GetConfiguredDbDate();
         if (selectedDate == previousDate) return;
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        if (selectedDate != today)
+        {
+            if (MessageBox.Show(
+                    "do NOT change date unless you know what do are doing. This can pull updates from wrong days into todays database.",
+                    "Warning",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning) != DialogResult.Yes)
+            {
+                _suppressDbDateChange = true;
+                dtpDbDate.Value = previousDate.ToDateTime(TimeOnly.MinValue);
+                _suppressDbDateChange = false;
+                return;
+            }
+
+            if (MessageBox.Show(
+                    "For TESTING PURPOSES ONLY.  You will ruin your competition by doing this on actual live DB",
+                    "Final warning",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Stop) != DialogResult.Yes)
+            {
+                _suppressDbDateChange = true;
+                dtpDbDate.Value = previousDate.ToDateTime(TimeOnly.MinValue);
+                _suppressDbDateChange = false;
+                return;
+            }
+        }
         _settings.CompetitionDate = selectedDate.ToString("yyyy-MM-dd");
         _settings.LastServerTimeUtc = DateTimeOffset.MinValue;
         _settings.Save();
-        AppendLog($"{DateTime.Now:HH:mm:ss} DB date changed to {selectedDate:yyyy-MM-dd}. Sync watermark reset.");
+        AppendLog($"{DateTime.Now:HH:mm:ss} API date changed to {selectedDate:yyyy-MM-dd}. Sync watermark reset.");
         UpdateDbDateWarning();
         LoadStagesFromDb();
     }
@@ -473,7 +502,7 @@ public partial class MainForm : Form
             var counts = await _api.GetLookupCountsAsync(selectedDate, _cancelSyncCts!.Token);
             if (counts is null)
             {
-                AppendLog($"{DateTime.Now:HH:mm:ss} Peek in WebApi failed: no response.");
+                AppendLog($"{DateTime.Now:HH:mm:ss} Peek in WebApi failed: {_api.LastError ?? "no response"}");
                 return;
             }
 
@@ -530,7 +559,7 @@ public partial class MainForm : Form
         var selectedDate = DateOnly.FromDateTime(dtpDbDate.Value.Date).ToString("yyyy-MM-dd");
         if (MessageBox.Show(
                 $"This will delete ALL data of {selectedDate}, you want to continue?",
-                "Delete DB date data",
+                "Delete API date data",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning) != DialogResult.Yes)
             return;
@@ -548,11 +577,11 @@ public partial class MainForm : Form
         UpdateStatusLabel($"Deleting {selectedDate} data...");
         try
         {
-            AppendLog($"{DateTime.Now:HH:mm:ss} Delete DB date data initiated for {selectedDate}.");
+            AppendLog($"{DateTime.Now:HH:mm:ss} Delete API date data initiated for {selectedDate}.");
             var response = await _api.DeleteCompetitionDataAsync(selectedDate, cts.Token);
             if (response is null)
             {
-                AppendLog($"{DateTime.Now:HH:mm:ss} Delete DB date data failed: no response.");
+                AppendLog($"{DateTime.Now:HH:mm:ss} Delete API date data failed: {_api.LastError ?? "no response"}");
                 return;
             }
 
@@ -679,6 +708,6 @@ public partial class MainForm : Form
         var today = DateOnly.FromDateTime(DateTime.Today);
         lblDbDateWarning.Text = selectedDate == today
             ? ""
-            : $"WARNING: DB date is {selectedDate:yyyy-MM-dd}, not today ({today:yyyy-MM-dd}).";
+            : $"WARNING: API date is {selectedDate:yyyy-MM-dd}, not today ({today:yyyy-MM-dd}).";
     }
 }

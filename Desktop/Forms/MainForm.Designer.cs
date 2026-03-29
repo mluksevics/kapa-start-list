@@ -86,7 +86,7 @@ partial class MainForm
         };
         cmbDay.SelectedIndexChanged += cmbDay_SelectedIndexChanged;
 
-        lblDbDateCaption = MakeLabel("DB date:", lw + margin + 350, y, 58);
+        lblDbDateCaption = MakeLabel("API date:", lw + margin + 350, y, 58);
         dtpDbDate = new DateTimePicker
         {
             Format = DateTimePickerFormat.Custom,

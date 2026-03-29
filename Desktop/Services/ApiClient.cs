@@ -10,6 +10,7 @@ public class ApiClient
 {
     private readonly HttpClient _http;
     private readonly Func<AppSettings> _getSettings;
+    public string? LastError { get; private set; }
 
     public ApiClient(Func<AppSettings> getSettings)
     {
@@ -105,43 +106,62 @@ public class ApiClient
 
     public async Task<LookupCountsResponse?> GetLookupCountsAsync(string date, CancellationToken ct = default)
     {
+        LastError = null;
         var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/lookups/counts/{date}";
         try
         {
             var msg = new HttpRequestMessage(HttpMethod.Get, url);
             msg.Headers.Add("X-Api-Key", S.ApiKey);
             var response = await _http.SendAsync(msg, ct);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode)
+            {
+                LastError = await BuildHttpErrorAsync(response, ct);
+                return null;
+            }
             return await response.Content.ReadFromJsonAsync<LookupCountsResponse>(ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
+            LastError = ex.Message;
             return null;
         }
     }
 
     public async Task<DeleteTodayDataResponse?> DeleteCompetitionDataAsync(string date, CancellationToken ct = default)
     {
+        LastError = null;
         var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/competitions/{date}/data";
         try
         {
             var msg = new HttpRequestMessage(HttpMethod.Delete, url);
             msg.Headers.Add("X-Api-Key", S.ApiKey);
             var response = await _http.SendAsync(msg, ct);
-            if (!response.IsSuccessStatusCode) return null;
-            return await response.Content.ReadFromJsonAsync<DeleteTodayDataResponse>(ct);
+            if (response.IsSuccessStatusCode)
+                return await response.Content.ReadFromJsonAsync<DeleteTodayDataResponse>(ct);
+
+            LastError = await BuildHttpErrorAsync(response, ct);
+            return null;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
+            LastError = ex.Message;
             return null;
         }
+    }
+
+    private static async Task<string> BuildHttpErrorAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (body.Length > 300)
+            body = body[..300];
+        return $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}. {body}";
     }
 }
