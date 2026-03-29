@@ -132,7 +132,7 @@ public class DbIsamRepository
             using var db = new DbBridgeService(_log);
             if (db.Open(settings.DbIsamPath))
             {
-                var snapshots = new Dictionary<int, DbRunnerSnapshot?>();
+                var snapshots = new Dictionary<(int StartNumber, int DayNo), DbRunnerSnapshot?>();
                 var foreignUpdates = pulledRunners
                     .Where(r => !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
                     .ToList();
@@ -163,14 +163,17 @@ public class DbIsamRepository
                 {
                     ct.ThrowIfCancellationRequested();
                     if (!int.TryParse(r.SiChipNo, out int chipNr)) continue;
-                    var snapshot = GetSnapshot(db, snapshots, settings.DayNo, r.StartNumber);
-                    if (snapshot is not null && ChipsEqual(snapshot.ChipNo, r.SiChipNo))
+                    for (int dayNo = settings.DayNo; dayNo <= 6; dayNo++)
                     {
-                        _log($"{Ts()} DBISAM ChipNr #{r.StartNumber}: SKIP unchanged ({r.SiChipNo})");
-                        continue;
+                        var snapshot = GetSnapshot(db, snapshots, dayNo, r.StartNumber);
+                        if (snapshot is not null && ChipsEqual(snapshot.ChipNo, r.SiChipNo))
+                        {
+                            _log($"{Ts()} DBISAM ChipNr #{r.StartNumber} Day{dayNo}: SKIP unchanged ({r.SiChipNo})");
+                            continue;
+                        }
+                        var res = db.ChangeChipNrByStartNr(dayNo, chipNr, r.StartNumber);
+                        _log($"{Ts()} DBISAM ChipNr #{r.StartNumber} Day{dayNo} → {chipNr}: {(res.Success ? "OK" : $"ERROR {res.Message}")}");
                     }
-                    var res = db.ChangeChipNrByStartNr(settings.DayNo, chipNr, r.StartNumber);
-                    _log($"{Ts()} DBISAM ChipNr #{r.StartNumber} → {chipNr}: {(res.Success ? "OK" : $"ERROR {res.Message}")}");
                 }
 
                 foreach (var r in katUpdates)
@@ -223,17 +226,18 @@ public class DbIsamRepository
 
     private DbRunnerSnapshot? GetSnapshot(
         DbBridgeService db,
-        Dictionary<int, DbRunnerSnapshot?> cache,
+        Dictionary<(int StartNumber, int DayNo), DbRunnerSnapshot?> cache,
         int dayNo,
         int startNumber)
     {
-        if (cache.TryGetValue(startNumber, out var cached))
+        var key = (startNumber, dayNo);
+        if (cache.TryGetValue(key, out var cached))
             return cached;
 
         var (listResult, listRaw) = db.GetIdNrListByStartNr(startNumber);
         if (!listResult.Success)
         {
-            cache[startNumber] = null;
+            cache[key] = null;
             return null;
         }
 
@@ -241,14 +245,14 @@ public class DbIsamRepository
         int idNr = idNrs.Count > 0 ? idNrs[0] : 0;
         if (idNr <= 0)
         {
-            cache[startNumber] = null;
+            cache[key] = null;
             return null;
         }
 
         var (infoResult, infoRaw) = db.GetTeilnInfoByIdNr(idNr);
         if (!infoResult.Success || string.IsNullOrWhiteSpace(infoRaw))
         {
-            cache[startNumber] = null;
+            cache[key] = null;
             return null;
         }
 
@@ -262,7 +266,7 @@ public class DbIsamRepository
         int classId = int.TryParse(GetField(fields, "KatNr"), out var katNr) ? katNr : 0;
 
         var snapshot = new DbRunnerSnapshot(chip, classId, start, name, surname, clubId, clubName);
-        cache[startNumber] = snapshot;
+        cache[key] = snapshot;
         return snapshot;
     }
 
