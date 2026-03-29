@@ -163,7 +163,15 @@ public class DbIsamRepository
                 {
                     ct.ThrowIfCancellationRequested();
                     if (!int.TryParse(r.SiChipNo, out int chipNr)) continue;
-                    for (int dayNo = settings.DayNo; dayNo <= 6; dayNo++)
+                    const int maxChipUpdateDay = 3;
+                    int startDay = Math.Max(1, settings.DayNo);
+                    if (startDay > maxChipUpdateDay)
+                    {
+                        _log($"{Ts()} DBISAM ChipNr #{r.StartNumber}: SKIP (selected API day {settings.DayNo} is outside allowed chip update range 1-{maxChipUpdateDay}).");
+                        continue;
+                    }
+
+                    for (int dayNo = startDay; dayNo <= maxChipUpdateDay; dayNo++)
                     {
                         var snapshot = GetSnapshot(db, snapshots, dayNo, r.StartNumber);
                         if (snapshot is not null && ChipsEqual(snapshot.ChipNo, r.SiChipNo))
