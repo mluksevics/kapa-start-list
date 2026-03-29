@@ -29,7 +29,7 @@ public partial class MainForm : Form
 
         _settings = AppSettings.Load();
         DbBridgeService.SetCodePage(_settings.DbCodePage);
-        _logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "sync_log.txt");
+        _logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "StartRefSync.log");
 
         _api = new ApiClient(() => _settings);
         var dbIsamRepository = new DbIsamRepository(AppendLog);
