@@ -54,8 +54,19 @@ public partial class MainForm : Form
 
     private void LoadSettingsToUi()
     {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var todayText = today.ToString("yyyy-MM-dd");
+        if (!string.Equals(_settings.CompetitionDate, todayText, StringComparison.Ordinal))
+        {
+            _settings.CompetitionDate = todayText;
+            _settings.LastServerTimeUtc = DateTimeOffset.MinValue;
+            _settings.Save();
+        }
+
         txtApiUrl.Text = _settings.ApiBaseUrl;
         lblDbPath.Text = _settings.DbIsamPath.Length > 0 ? _settings.DbIsamPath : "(not set)";
+        dtpDbDate.Value = today.ToDateTime(TimeOnly.MinValue);
+        UpdateDbDateWarning();
         chkAutoSync.Checked = _settings.AutoSyncEnabled;
         btnFailureSound.Text = _settings.FailureSoundEnabled ? "🔊" : "🔇";
         nudInterval.Value = _settings.SyncIntervalSeconds;
@@ -76,8 +87,8 @@ public partial class MainForm : Form
             return;
         }
 
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        int todayIndex = -1;
+        var selectedDate = DateOnly.FromDateTime(dtpDbDate.Value.Date);
+        int selectedDateIndex = -1;
 
         try
         {
@@ -96,8 +107,8 @@ public partial class MainForm : Form
                 var (result, info) = db.GetEtapInfo(dayNo);
                 if (!result.Success) continue;
                 cmbDay.Items.Add(new EtapItem(dayNo, info!.Name, info.Date));
-                if (todayIndex < 0 && TryParseEtapDate(info.Date, out var d) && d == today)
-                    todayIndex = cmbDay.Items.Count - 1;
+                if (selectedDateIndex < 0 && TryParseEtapDate(info.Date, out var d) && d == selectedDate)
+                    selectedDateIndex = cmbDay.Items.Count - 1;
             }
             SetPushActionsEnabled(true);
         }
@@ -114,9 +125,9 @@ public partial class MainForm : Form
 
         cmbDay.Enabled = true;
 
-        if (todayIndex >= 0)
+        if (selectedDateIndex >= 0)
         {
-            cmbDay.SelectedIndex = todayIndex;
+            cmbDay.SelectedIndex = selectedDateIndex;
             lblDayNote.Text = "";
         }
         else
@@ -129,7 +140,7 @@ public partial class MainForm : Form
                 { savedIndex = i; break; }
             }
             cmbDay.SelectedIndex = savedIndex >= 0 ? savedIndex : 0;
-            lblDayNote.Text = $"Competition does not have a stage with today's date ({today:yyyy-MM-dd}).";
+            lblDayNote.Text = $"Competition does not have a stage with DB date ({selectedDate:yyyy-MM-dd}).";
         }
     }
 
@@ -150,6 +161,19 @@ public partial class MainForm : Form
             _settings.DayNo = item.DayNo;
             _settings.Save();
         }
+    }
+
+    private void dtpDbDate_ValueChanged(object sender, EventArgs e)
+    {
+        var selectedDate = DateOnly.FromDateTime(dtpDbDate.Value.Date);
+        var previousDate = GetConfiguredDbDate();
+        if (selectedDate == previousDate) return;
+        _settings.CompetitionDate = selectedDate.ToString("yyyy-MM-dd");
+        _settings.LastServerTimeUtc = DateTimeOffset.MinValue;
+        _settings.Save();
+        AppendLog($"{DateTime.Now:HH:mm:ss} DB date changed to {selectedDate:yyyy-MM-dd}. Sync watermark reset.");
+        UpdateDbDateWarning();
+        LoadStagesFromDb();
     }
 
     // ── Log / status ──────────────────────────────────────────────────────────
@@ -275,6 +299,7 @@ public partial class MainForm : Form
         btnPushClubs.Enabled = false;
         btnPeekWebApi.Enabled = false;
         btnPullPast.Enabled = false;
+        btnDeleteTodayData.Enabled = false;
         StartRunningStatus(commandName);
         return true;
     }
@@ -290,6 +315,7 @@ public partial class MainForm : Form
         btnPushClubs.Enabled = _pushActionsEnabled;
         btnPeekWebApi.Enabled = true;
         btnPullPast.Enabled = true;
+        btnDeleteTodayData.Enabled = true;
         StopRunningStatus();
         if (_settings.AutoSyncEnabled && _pushActionsEnabled) _syncService.Start();
     }
@@ -443,14 +469,15 @@ public partial class MainForm : Form
             if (userInitiated)
                 AppendLog($"{DateTime.Now:HH:mm:ss} Peek in WebApi initiated.");
 
-            var counts = await _api.GetLookupCountsAsync(_cancelSyncCts!.Token);
+            var selectedDate = DateOnly.FromDateTime(dtpDbDate.Value.Date).ToString("yyyy-MM-dd");
+            var counts = await _api.GetLookupCountsAsync(selectedDate, _cancelSyncCts!.Token);
             if (counts is null)
             {
                 AppendLog($"{DateTime.Now:HH:mm:ss} Peek in WebApi failed: no response.");
                 return;
             }
 
-            AppendLog($"{DateTime.Now:HH:mm:ss} WebApi SQL counts -> competitors: {counts.Competitors}, clubs: {counts.Clubs}, classes: {counts.Classes}");
+            AppendLog($"{DateTime.Now:HH:mm:ss} WebApi SQL counts ({selectedDate}) -> competitors: {counts.Competitors}, clubs: {counts.Clubs}, classes: {counts.Classes}");
         }
         catch (OperationCanceledException)
         {
@@ -498,6 +525,51 @@ public partial class MainForm : Form
         await RunPullPastUpdatesAsync(dlg.SelectedMinutes);
     }
 
+    private async void btnDeleteTodayData_Click(object sender, EventArgs e)
+    {
+        var selectedDate = DateOnly.FromDateTime(dtpDbDate.Value.Date).ToString("yyyy-MM-dd");
+        if (MessageBox.Show(
+                $"This will delete ALL data of {selectedDate}, you want to continue?",
+                "Delete DB date data",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning) != DialogResult.Yes)
+            return;
+
+        if (MessageBox.Show(
+                $"This is your second warning.\n\nIt will WIPE {selectedDate} from API and cannot be undone.\n\nAre you absolutely sure?",
+                "Final confirmation",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Stop) != DialogResult.Yes)
+            return;
+
+        if (!TryBeginCancelableCommand("Delete Today Data")) return;
+        var cts = _cancelSyncCts;
+        if (cts is null) return;
+        UpdateStatusLabel($"Deleting {selectedDate} data...");
+        try
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Delete DB date data initiated for {selectedDate}.");
+            var response = await _api.DeleteCompetitionDataAsync(selectedDate, cts.Token);
+            if (response is null)
+            {
+                AppendLog($"{DateTime.Now:HH:mm:ss} Delete DB date data failed: no response.");
+                return;
+            }
+
+            AppendLog(
+                $"{DateTime.Now:HH:mm:ss} Delete Today Data done -> date: {response.Date}, runners: {response.DeletedRunners}, competitions: {response.DeletedCompetitions}, classes: {response.DeletedClasses}, clubs: {response.DeletedClubs}");
+        }
+        catch (OperationCanceledException)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Delete Today Data cancelled by user.");
+        }
+        finally
+        {
+            EndCancelableCommand();
+            UpdateStatusLabel("Idle");
+        }
+    }
+
     private void btnCancelSync_Click(object sender, EventArgs e)
     {
         if (_cancelSyncCts is null || _cancelSyncCts.IsCancellationRequested) return;
@@ -526,6 +598,7 @@ public partial class MainForm : Form
         btnPushClubs.Enabled = false;
         btnPeekWebApi.Enabled = false;
         btnPullPast.Enabled = false;
+        btnDeleteTodayData.Enabled = false;
         StartRunningStatus("Auto-sync");
         AppendLog($"{DateTime.Now:HH:mm:ss} Auto-sync started.");
     }
@@ -543,6 +616,7 @@ public partial class MainForm : Form
         btnPushClubs.Enabled = _pushActionsEnabled;
         btnPeekWebApi.Enabled = true;
         btnPullPast.Enabled = true;
+        btnDeleteTodayData.Enabled = true;
         StopRunningStatus();
         UpdateStatusLabel("Idle");
     }
@@ -588,5 +662,23 @@ public partial class MainForm : Form
         _settings.ApiBaseUrl = txtApiUrl.Text.Trim();
         _settings.Save();
         base.OnFormClosing(e);
+    }
+
+    private DateOnly GetConfiguredDbDate()
+    {
+        if (DateOnly.TryParseExact(_settings.CompetitionDate, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var configured))
+            return configured;
+        if (DateOnly.TryParse(_settings.CompetitionDate, out configured))
+            return configured;
+        return DateOnly.FromDateTime(DateTime.Today);
+    }
+
+    private void UpdateDbDateWarning()
+    {
+        var selectedDate = DateOnly.FromDateTime(dtpDbDate.Value.Date);
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        lblDbDateWarning.Text = selectedDate == today
+            ? ""
+            : $"WARNING: DB date is {selectedDate:yyyy-MM-dd}, not today ({today:yyyy-MM-dd}).";
     }
 }

@@ -78,18 +78,18 @@ public class SyncService
     public async Task ForcePushAllAsync(CancellationToken ct = default)
     {
         var settings = _getSettings();
-        var today = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
-        await UploadForcePushAsync(settings, today, ct);
+        var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
+        await UploadForcePushAsync(settings, date, ct);
     }
 
     public async Task<int> PullUpdatesSinceAsync(DateTimeOffset changedSinceUtc, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         var settings = _getSettings();
-        var today = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
-        _log($"{Ts()} Pulling from API since {changedSinceUtc:O}...");
+        var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
+        _log($"{Ts()} Pulling from API for date {date} since {changedSinceUtc:O}...");
 
-        var pullResult = await _api.GetRunnersAsync(today, changedSinceUtc, ct);
+        var pullResult = await _api.GetRunnersAsync(date, changedSinceUtc, ct);
         if (pullResult is null)
         {
             _log($"{Ts()} PULL (since) failed — API unreachable.");
@@ -106,15 +106,15 @@ public class SyncService
     {
         ct.ThrowIfCancellationRequested();
         var settings = _getSettings();
-        var today = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
+        var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
 
         // 1. PULL
-        _log($"{Ts()} Pulling from API...");
+        _log($"{Ts()} Pulling from API for date {date}...");
         DateTimeOffset? changedSince = settings.LastServerTimeUtc == DateTimeOffset.MinValue
             ? null
             : settings.LastServerTimeUtc;
 
-        var pullResult = await _api.GetRunnersAsync(today, changedSince, ct);
+        var pullResult = await _api.GetRunnersAsync(date, changedSince, ct);
         if (pullResult is null)
         {
             _log($"{Ts()} PULL failed — API unreachable.");
@@ -125,7 +125,7 @@ public class SyncService
 
         // 6. Bulk push
         if (forcePush)
-            await UploadForcePushAsync(settings, today, ct);
+            await UploadForcePushAsync(settings, date, ct);
         else if (pullResult.Runners.Count == 0)
             _log($"{Ts()} Sync: no changes from API.");
         else
@@ -198,6 +198,15 @@ public class SyncService
     }
 
     private static string Ts() => DateTime.Now.ToString("HH:mm:ss");
+
+    private static DateOnly ResolveCompetitionDate(AppSettings settings)
+    {
+        if (DateOnly.TryParseExact(settings.CompetitionDate, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var configuredDate))
+            return configuredDate;
+        if (DateOnly.TryParse(settings.CompetitionDate, out configuredDate))
+            return configuredDate;
+        return DateOnly.FromDateTime(DateTime.Today);
+    }
 
     private async Task RunAutoSyncTickAsync()
     {

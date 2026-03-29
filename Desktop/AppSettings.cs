@@ -12,6 +12,7 @@ public class AppSettings
     public bool FailureSoundEnabled { get; set; } = true;
     public string DeviceName { get; set; } = "desktop";
     public int DayNo { get; set; } = 1;
+    public string CompetitionDate { get; set; } = "";
     public int DbCodePage { get; set; } = 1257;
     public DateTimeOffset LastServerTimeUtc { get; set; } = DateTimeOffset.MinValue;
 

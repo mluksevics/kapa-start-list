@@ -103,9 +103,9 @@ public class ApiClient
         }
     }
 
-    public async Task<LookupCountsResponse?> GetLookupCountsAsync(CancellationToken ct = default)
+    public async Task<LookupCountsResponse?> GetLookupCountsAsync(string date, CancellationToken ct = default)
     {
-        var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/lookups/counts";
+        var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/lookups/counts/{date}";
         try
         {
             var msg = new HttpRequestMessage(HttpMethod.Get, url);
@@ -113,6 +113,27 @@ public class ApiClient
             var response = await _http.SendAsync(msg, ct);
             if (!response.IsSuccessStatusCode) return null;
             return await response.Content.ReadFromJsonAsync<LookupCountsResponse>(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<DeleteTodayDataResponse?> DeleteCompetitionDataAsync(string date, CancellationToken ct = default)
+    {
+        var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/competitions/{date}/data";
+        try
+        {
+            var msg = new HttpRequestMessage(HttpMethod.Delete, url);
+            msg.Headers.Add("X-Api-Key", S.ApiKey);
+            var response = await _http.SendAsync(msg, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            return await response.Content.ReadFromJsonAsync<DeleteTodayDataResponse>(ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

@@ -38,6 +38,30 @@ public static class LookupEndpoints
             return Results.Ok(new LookupCountsResponse(competitors, clubs, classes));
         });
 
+        app.MapGet("/api/lookups/counts/{date}", async (string date, AppDbContext db) =>
+        {
+            if (!DateOnly.TryParse(date, out var competitionDate))
+                return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
+
+            var dayRunners = db.Runners
+                .AsNoTracking()
+                .Where(r => r.CompetitionDate == competitionDate);
+
+            var competitors = await dayRunners.CountAsync();
+            var clubs = await dayRunners
+                .Where(r => r.ClubId > 0)
+                .Select(r => r.ClubId)
+                .Distinct()
+                .CountAsync();
+            var classes = await dayRunners
+                .Where(r => r.ClassId > 0)
+                .Select(r => r.ClassId)
+                .Distinct()
+                .CountAsync();
+
+            return Results.Ok(new LookupCountsResponse(competitors, clubs, classes));
+        });
+
         app.MapPut("/api/lookups/classes", async (UpsertLookupRequest request, AppDbContext db) =>
         {
             if (request.Items is null || request.Items.Count == 0)

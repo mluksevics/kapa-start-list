@@ -11,14 +11,17 @@ partial class MainForm
     private Label lblDbPathCaption, lblDbPath;
     private Label lblStageCaption;
     private ComboBox cmbDay;
+    private Label lblDbDateCaption;
+    private DateTimePicker dtpDbDate;
     private Label lblDayNote;
+    private Label lblDbDateWarning;
     private CheckBox chkAutoSync;
     private Button btnFailureSound;
     private Label lblIntervalCaption;
     private NumericUpDown nudInterval;
     private Label lblIntervalUnit;
     private Label lblLastSyncCaption, lblLastSync;
-    private Button btnSyncNow, btnForcePush, btnPushClubs, btnPullPast, btnDbExplorer, btnPeekWebApi, btnCancelSync;
+    private Button btnSyncNow, btnForcePush, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync;
     private Label lblStatus;
     private TextBox txtLog;
     private Label lblLogCaption;
@@ -78,10 +81,20 @@ partial class MainForm
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
             Location = new System.Drawing.Point(lw + margin + 10, y - 2),
-            Width = 460,
+            Width = 330,
             Enabled = false
         };
         cmbDay.SelectedIndexChanged += cmbDay_SelectedIndexChanged;
+
+        lblDbDateCaption = MakeLabel("DB date:", lw + margin + 350, y, 58);
+        dtpDbDate = new DateTimePicker
+        {
+            Format = DateTimePickerFormat.Custom,
+            CustomFormat = "yyyy-MM-dd",
+            Location = new System.Drawing.Point(lw + margin + 410, y - 2),
+            Width = 120
+        };
+        dtpDbDate.ValueChanged += dtpDbDate_ValueChanged;
         y += 28;
 
         // Stage warning (shown in red when today has no matching stage)
@@ -93,7 +106,15 @@ partial class MainForm
             ForeColor = System.Drawing.Color.Red,
             AutoSize = false
         };
-        y += 22;
+        lblDbDateWarning = new Label
+        {
+            Text = "",
+            Location = new System.Drawing.Point(lw + margin + 10, y + 18),
+            Size = new System.Drawing.Size(620, 18),
+            ForeColor = System.Drawing.Color.Red,
+            AutoSize = false
+        };
+        y += 40;
 
         // ── Auto-sync row ─────────────────────────────────────────────────────
         chkAutoSync = new CheckBox
@@ -162,6 +183,14 @@ partial class MainForm
         };
         btnPullPast.Click += btnPullPast_Click;
 
+        btnDeleteTodayData = new Button
+        {
+            Text = "Delete Today",
+            Location = new System.Drawing.Point(510, y),
+            Size = new System.Drawing.Size(100, 30)
+        };
+        btnDeleteTodayData.Click += btnDeleteTodayData_Click;
+
         btnDbExplorer = new Button
         {
             Text = "E",
@@ -209,11 +238,11 @@ partial class MainForm
         {
             lblApiUrlCaption, txtApiUrl, btnEditApi, btnFailureSound,
             lblDbPathCaption, lblDbPath, btnBrowseDb,
-            lblStageCaption, cmbDay, lblDayNote,
+            lblStageCaption, cmbDay, lblDbDateCaption, dtpDbDate, lblDayNote, lblDbDateWarning,
             chkAutoSync, lblIntervalCaption, nudInterval, lblIntervalUnit,
             lblLastSyncCaption, lblLastSync,
             sep,
-            btnSyncNow, btnForcePush, btnPushClubs, btnPullPast, btnDbExplorer, btnPeekWebApi, btnCancelSync, lblStatus,
+            btnSyncNow, btnForcePush, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, lblStatus,
             lblLogCaption, txtLog
         });
     }
