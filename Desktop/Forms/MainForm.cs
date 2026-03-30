@@ -1,3 +1,4 @@
+using System.Reflection;
 using StartRef.Desktop;
 using StartRef.Desktop.DbBridge;
 using StartRef.Desktop.Services;
@@ -27,6 +28,12 @@ public partial class MainForm : Form
     {
         InitializeComponent();
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+
+        var appVersion = (typeof(MainForm).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion ?? "0.0.0000")
+            .Split('+')[0];
+        Text = $"StartRef Desktop v{appVersion}";
 
         _settings = AppSettings.Load();
         DbBridgeService.SetCodePage(_settings.DbCodePage);

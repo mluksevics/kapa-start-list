@@ -1,0 +1,21 @@
+<Project>
+  <PropertyGroup>
+    <MajorMinor>0.1</MajorMinor>
+  </PropertyGroup>
+
+  <Target Name="ComputeVersionFromGit" BeforeTargets="GenerateAssemblyInfo">
+    <Exec Command="git rev-list --count HEAD"
+          ConsoleToMSBuild="true"
+          IgnoreExitCode="true"
+          WorkingDirectory="$(MSBuildThisFileDirectory)">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCommitCount" />
+    </Exec>
+    <PropertyGroup>
+      <GitCommitCount Condition="'$(GitCommitCount)' == ''">0</GitCommitCount>
+      <GitCommitCount>$(GitCommitCount.Trim())</GitCommitCount>
+      <PatchVersion>$([System.String]::Format('{0:D4}', $([System.Int32]::Parse('$(GitCommitCount)'))))</PatchVersion>
+      <InformationalVersion>$(MajorMinor).$(PatchVersion)</InformationalVersion>
+      <FileVersion>$(MajorMinor).$(GitCommitCount)</FileVersion>
+    </PropertyGroup>
+  </Target>
+</Project>

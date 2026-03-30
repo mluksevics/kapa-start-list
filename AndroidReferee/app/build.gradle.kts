@@ -6,6 +6,19 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+fun gitCommitCount(): Int {
+    return try {
+        val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
+            .directory(rootProject.projectDir)
+            .start()
+        process.inputStream.bufferedReader().readText().trim().toIntOrNull() ?: 0
+    } catch (e: Exception) {
+        0
+    }
+}
+
+val commitCount = gitCommitCount()
+
 android {
     namespace = "com.orienteering.startref"
     compileSdk = 35
@@ -14,8 +27,8 @@ android {
         applicationId = "com.orienteering.startref"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = commitCount
+        versionName = "0.1.%04d".format(commitCount)
     }
 
     buildTypes {
@@ -39,6 +52,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
