@@ -14,7 +14,13 @@ public class AppSettings
     public int DayNo { get; set; } = 1;
     public string CompetitionDate { get; set; } = "";
     public int DbCodePage { get; set; } = 1257;
-    public DateTimeOffset LastServerTimeUtc { get; set; } = DateTimeOffset.MinValue;
+    public Dictionary<string, DateTimeOffset> LastServerTimeByDate { get; set; } = new();
+
+    public DateTimeOffset GetWatermark(string date) =>
+        LastServerTimeByDate.TryGetValue(date, out var t) ? t : DateTimeOffset.MinValue;
+
+    public void SetWatermark(string date, DateTimeOffset value) =>
+        LastServerTimeByDate[date] = value;
 
     private static readonly string SettingsPath =
         Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");

@@ -64,12 +64,8 @@ public partial class MainForm : Form
     {
         var today = DateOnly.FromDateTime(DateTime.Today);
         var todayText = today.ToString("yyyy-MM-dd");
-        if (!string.Equals(_settings.CompetitionDate, todayText, StringComparison.Ordinal))
-        {
-            _settings.CompetitionDate = todayText;
-            _settings.LastServerTimeUtc = DateTimeOffset.MinValue;
-            _settings.Save();
-        }
+        _settings.CompetitionDate = todayText;
+        _settings.Save();
 
         txtApiUrl.Text = _settings.ApiBaseUrl;
         lblDbPath.Text = _settings.DbIsamPath.Length > 0 ? _settings.DbIsamPath : "(not set)";
@@ -205,9 +201,8 @@ public partial class MainForm : Form
             }
         }
         _settings.CompetitionDate = selectedDate.ToString("yyyy-MM-dd");
-        _settings.LastServerTimeUtc = DateTimeOffset.MinValue;
         _settings.Save();
-        AppendLog($"{DateTime.Now:HH:mm:ss} API date changed to {selectedDate:yyyy-MM-dd}. Sync watermark reset.");
+        AppendLog($"{DateTime.Now:HH:mm:ss} API date changed to {selectedDate:yyyy-MM-dd}.");
         UpdateDbDateWarning();
         LoadStagesFromDb();
     }
@@ -216,9 +211,10 @@ public partial class MainForm : Form
 
     private void UpdateLastSyncLabel()
     {
-        lblLastSync.Text = _settings.LastServerTimeUtc == DateTimeOffset.MinValue
+        var wm = _settings.GetWatermark(_settings.CompetitionDate);
+        lblLastSync.Text = wm == DateTimeOffset.MinValue
             ? "Never"
-            : _settings.LastServerTimeUtc.ToLocalTime().ToString("HH:mm:ss");
+            : wm.ToLocalTime().ToString("HH:mm:ss");
     }
 
     private void AppendLog(string message)

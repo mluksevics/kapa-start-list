@@ -110,9 +110,8 @@ public class SyncService
 
         // 1. PULL
         _log($"{Ts()} Pulling from API for date {date}...");
-        DateTimeOffset? changedSince = settings.LastServerTimeUtc == DateTimeOffset.MinValue
-            ? null
-            : settings.LastServerTimeUtc;
+        var watermark = settings.GetWatermark(date);
+        DateTimeOffset? changedSince = watermark == DateTimeOffset.MinValue ? null : watermark;
 
         var pullResult = await _api.GetRunnersAsync(date, changedSince, ct);
         if (pullResult is null)
@@ -132,7 +131,7 @@ public class SyncService
             _log($"{Ts()} Sync: pulled {pullResult.Runners.Count} runner(s).");
 
         // Update watermark
-        settings.LastServerTimeUtc = pullResult.ServerTimeUtc;
+        settings.SetWatermark(date, pullResult.ServerTimeUtc);
         settings.Save();
     }
 
