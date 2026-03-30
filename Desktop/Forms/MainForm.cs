@@ -653,6 +653,12 @@ public partial class MainForm : Form
         UpdateStatusLabel("Idle");
     }
 
+    private void chkTestMode_CheckedChanged(object sender, EventArgs e)
+    {
+        _settings.IsTestMode = chkTestMode.Checked;
+        AppendLog($"{DateTime.Now:HH:mm:ss} Test mode {(_settings.IsTestMode ? "enabled" : "disabled")}.");
+    }
+
     private void chkAutoSync_CheckedChanged(object sender, EventArgs e)
     {
         _settings.AutoSyncEnabled = chkAutoSync.Checked;

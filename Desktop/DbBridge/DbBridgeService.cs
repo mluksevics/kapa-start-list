@@ -167,32 +167,25 @@ public class DbBridgeService : IDisposable
 
     private DbBridgeResult NotOpen() => new(false, DbBridgeNative.DBR_CTX_NIL, "DB is not open.");
 
-    private DbBridgeResult WrapWithTestModeRetry(int code, int dayNo, string okMessage, Func<int> retryAction)
-    {
-        if (code == DbBridgeNative.DBR_OK)
-            return Ok(okMessage);
+    public bool TestMode { get; set; } = false;
 
-        if (code != DbBridgeNative.DBR_DAY_NOT_ALLOWED)
-            return Fail(code);
+    private DbBridgeResult WrapWrite(int dayNo, string okMessage, Func<int> action)
+    {
+        if (!TestMode)
+            return Wrap(action(), okMessage);
 
         int testModeCode = DbBridgeNative.DbSetTestMode(_ctx, dayNo);
         if (testModeCode != DbBridgeNative.DBR_OK)
-            return Fail(code);
+            return Fail(testModeCode);
 
-        int retryCode;
         try
         {
-            retryCode = retryAction();
+            return Wrap(action(), okMessage);
         }
         finally
         {
             try { DbBridgeNative.DbDisableTestMode(_ctx); } catch { }
         }
-
-        if (retryCode == DbBridgeNative.DBR_OK)
-            return Ok($"{okMessage} (test mode retry)");
-
-        return Fail(retryCode);
     }
 
     private static string CodeName(int code) => code switch
@@ -260,47 +253,29 @@ public class DbBridgeService : IDisposable
     // ── Change StartTime ─────────────────────────────────────────────────────
 
     public DbBridgeResult ChangeStartTimeByIdNr(int dayNo, string hhmmss, int idNr) =>
-        IsOpen ? WrapWithTestModeRetry(
-            DbBridgeNative.DbChangeStartTimeByIdNr(_ctx, dayNo, hhmmss, idNr),
-            dayNo,
-            "StartTime updated",
+        IsOpen ? WrapWrite(dayNo, "StartTime updated",
             () => DbBridgeNative.DbChangeStartTimeByIdNr(_ctx, dayNo, hhmmss, idNr)) : NotOpen();
 
     public DbBridgeResult ChangeStartTimeByStartNr(int dayNo, string hhmmss, int startNr) =>
-        IsOpen ? WrapWithTestModeRetry(
-            DbBridgeNative.DbChangeStartTimeByStartNr(_ctx, dayNo, hhmmss, startNr),
-            dayNo,
-            "StartTime updated",
+        IsOpen ? WrapWrite(dayNo, "StartTime updated",
             () => DbBridgeNative.DbChangeStartTimeByStartNr(_ctx, dayNo, hhmmss, startNr)) : NotOpen();
 
     public DbBridgeResult ChangeStartTimeByChipNr(int dayNo, string hhmmss, int chipNr) =>
-        IsOpen ? WrapWithTestModeRetry(
-            DbBridgeNative.DbChangeStartTimeByChipNr(_ctx, dayNo, hhmmss, chipNr),
-            dayNo,
-            "StartTime updated",
+        IsOpen ? WrapWrite(dayNo, "StartTime updated",
             () => DbBridgeNative.DbChangeStartTimeByChipNr(_ctx, dayNo, hhmmss, chipNr)) : NotOpen();
 
     // ── Change ChipNr ────────────────────────────────────────────────────────
 
     public DbBridgeResult ChangeChipNrByIdNr(int dayNo, int newChipNr, int idNr) =>
-        IsOpen ? WrapWithTestModeRetry(
-            DbBridgeNative.DbChangeChipNrByIdNr(_ctx, dayNo, newChipNr, idNr),
-            dayNo,
-            "ChipNr updated",
+        IsOpen ? WrapWrite(dayNo, "ChipNr updated",
             () => DbBridgeNative.DbChangeChipNrByIdNr(_ctx, dayNo, newChipNr, idNr)) : NotOpen();
 
     public DbBridgeResult ChangeChipNrByStartNr(int dayNo, int newChipNr, int startNr) =>
-        IsOpen ? WrapWithTestModeRetry(
-            DbBridgeNative.DbChangeChipNrByStartNr(_ctx, dayNo, newChipNr, startNr),
-            dayNo,
-            "ChipNr updated",
+        IsOpen ? WrapWrite(dayNo, "ChipNr updated",
             () => DbBridgeNative.DbChangeChipNrByStartNr(_ctx, dayNo, newChipNr, startNr)) : NotOpen();
 
     public DbBridgeResult ChangeChipNrByOldChipNr(int dayNo, int newChipNr, int oldChipNr) =>
-        IsOpen ? WrapWithTestModeRetry(
-            DbBridgeNative.DbChangeChipNrByOldChipNr(_ctx, dayNo, newChipNr, oldChipNr),
-            dayNo,
-            "ChipNr updated",
+        IsOpen ? WrapWrite(dayNo, "ChipNr updated",
             () => DbBridgeNative.DbChangeChipNrByOldChipNr(_ctx, dayNo, newChipNr, oldChipNr)) : NotOpen();
 
     // ── Change KatNr ─────────────────────────────────────────────────────────
@@ -312,10 +287,7 @@ public class DbBridgeService : IDisposable
         IsOpen ? Wrap(DbBridgeNative.DbChangeKatNrByStartNr(_ctx, newKatNr, startNr), "KatNr updated") : NotOpen();
 
     public DbBridgeResult ChangeKatNrByChipNr(int dayNo, int newKatNr, int chipNr) =>
-        IsOpen ? WrapWithTestModeRetry(
-            DbBridgeNative.DbChangeKatNrByChipNr(_ctx, dayNo, newKatNr, chipNr),
-            dayNo,
-            "KatNr updated",
+        IsOpen ? WrapWrite(dayNo, "KatNr updated",
             () => DbBridgeNative.DbChangeKatNrByChipNr(_ctx, dayNo, newKatNr, chipNr)) : NotOpen();
 
     // ── Change Name / Surname / ClubNr ───────────────────────────────────────

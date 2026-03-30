@@ -16,6 +16,9 @@ public class AppSettings
     public int DbCodePage { get; set; } = 1257;
     public Dictionary<string, DateTimeOffset> LastServerTimeByDate { get; set; } = new();
 
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsTestMode { get; set; } = false;
+
     public DateTimeOffset GetWatermark(string date) =>
         LastServerTimeByDate.TryGetValue(date, out var t) ? t : DateTimeOffset.MinValue;
 

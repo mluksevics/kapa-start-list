@@ -130,6 +130,7 @@ public class DbIsamRepository
         if (hasDbUpdates && !string.IsNullOrEmpty(settings.DbIsamPath))
         {
             using var db = new DbBridgeService(_log);
+            db.TestMode = settings.IsTestMode;
             if (db.Open(settings.DbIsamPath))
             {
                 var snapshots = new Dictionary<(int StartNumber, int DayNo), DbRunnerSnapshot?>();

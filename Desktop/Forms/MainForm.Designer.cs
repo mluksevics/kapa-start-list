@@ -21,6 +21,7 @@ partial class MainForm
     private NumericUpDown nudInterval;
     private Label lblIntervalUnit;
     private Label lblLastSyncCaption, lblLastSync;
+    private CheckBox chkTestMode;
     private Button btnSyncNow, btnForcePush, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync;
     private Label lblStatus;
     private TextBox txtLog;
@@ -139,6 +140,14 @@ partial class MainForm
 
         lblLastSyncCaption = MakeLabel("Last sync:", 360, y, 65);
         lblLastSync = MakeLabel("Never", 428, y, 100);
+
+        chkTestMode = new CheckBox
+        {
+            Text = "Test mode",
+            Location = new System.Drawing.Point(540, y),
+            AutoSize = true
+        };
+        chkTestMode.CheckedChanged += chkTestMode_CheckedChanged;
         y += 32;
 
         // Separator
@@ -240,7 +249,7 @@ partial class MainForm
             lblDbPathCaption, lblDbPath, btnBrowseDb,
             lblStageCaption, cmbDay, lblDbDateCaption, dtpDbDate, lblDayNote, lblDbDateWarning,
             chkAutoSync, lblIntervalCaption, nudInterval, lblIntervalUnit,
-            lblLastSyncCaption, lblLastSync,
+            lblLastSyncCaption, lblLastSync, chkTestMode,
             sep,
             btnSyncNow, btnForcePush, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, lblStatus,
             lblLogCaption, txtLog
