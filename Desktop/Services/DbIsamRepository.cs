@@ -174,6 +174,15 @@ public class DbIsamRepository
                     for (int dayNo = startDay; dayNo <= maxChipUpdateDay; dayNo++)
                     {
                         var snapshot = GetSnapshot(db, snapshots, dayNo, r.StartNumber);
+                        if (dayNo > startDay)
+                        {
+                            var existingChip = (snapshot?.ChipNo ?? string.Empty).Trim();
+                            if (!int.TryParse(existingChip, out int existingChipNr) || existingChipNr == 0)
+                            {
+                                _log($"{Ts()} DBISAM ChipNr #{r.StartNumber} Day{dayNo}: SKIP propagation (no chip assigned)");
+                                continue;
+                            }
+                        }
                         if (snapshot is not null && ChipsEqual(snapshot.ChipNo, r.SiChipNo))
                         {
                             _log($"{Ts()} DBISAM ChipNr #{r.StartNumber} Day{dayNo}: SKIP unchanged ({r.SiChipNo})");
