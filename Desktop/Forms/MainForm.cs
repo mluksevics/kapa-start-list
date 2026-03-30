@@ -655,6 +655,24 @@ public partial class MainForm : Form
 
     private void chkTestMode_CheckedChanged(object sender, EventArgs e)
     {
+        if (chkTestMode.Checked)
+        {
+            var result = MessageBox.Show(
+                "Test mode allows writing to days that are not the active competition day.\n\n" +
+                "NEVER enable this on a real competition database — it will corrupt your data.\n\n" +
+                "Are you sure you want to enable test mode?",
+                "WARNING: Test Mode",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+
+            if (result != DialogResult.Yes)
+            {
+                chkTestMode.Checked = false;
+                return;
+            }
+        }
+
         _settings.IsTestMode = chkTestMode.Checked;
         AppendLog($"{DateTime.Now:HH:mm:ss} Test mode {(_settings.IsTestMode ? "enabled" : "disabled")}.");
     }
