@@ -18,6 +18,7 @@ public partial class MainForm : Form
     private DateTimeOffset _runningStartedAtUtc;
     private bool _pushActionsEnabled;
     private bool _suppressDbDateChange;
+    private bool _advancedExpanded;
 
     private sealed record EtapItem(int DayNo, string Name, string Date)
     {
@@ -49,8 +50,29 @@ public partial class MainForm : Form
         LoadSettingsToUi();   // sets chkAutoSync, which fires Start() if enabled
         LoadStagesFromDb();
         Shown += MainForm_Shown;
+        Resize += (_, _) => ApplyAdvancedLayout();
 
+        ApplyAdvancedLayout();
         UpdateStatusLabel("Idle");
+    }
+
+    private void btnAdvancedToggle_Click(object? sender, EventArgs e)
+    {
+        _advancedExpanded = !_advancedExpanded;
+        panelAdvancedContent.Visible = _advancedExpanded;
+        btnAdvancedToggle.Text = _advancedExpanded ? "▼ Advanced" : "▶ Advanced";
+        ApplyAdvancedLayout();
+    }
+
+    private void ApplyAdvancedLayout()
+    {
+        var statusTop = _advancedExpanded ? panelAdvancedContent.Bottom + 8 : btnAdvancedToggle.Bottom + 8;
+        btnCancelSync.Location = new Point(10, statusTop);
+        lblStatus.Location = new Point(10 + btnCancelSync.Width + 6, statusTop);
+        lblStatus.Width = Math.Max(200, ClientSize.Width - lblStatus.Left - 20);
+        lblLogCaption.Location = new Point(10, statusTop + 28);
+        txtLog.Location = new Point(10, statusTop + 48);
+        txtLog.Height = Math.Max(120, ClientSize.Height - txtLog.Top - 12);
     }
 
     private async void MainForm_Shown(object? sender, EventArgs e)
@@ -390,19 +412,19 @@ public partial class MainForm : Form
 
     private async void btnSyncNow_Click(object sender, EventArgs e)
     {
-        if (!EnsureDbAvailableForPush("Sync Now")) return;
-        if (!TryBeginCancelableCommand("Sync Now")) return;
+        if (!EnsureDbAvailableForPush("Pull Now")) return;
+        if (!TryBeginCancelableCommand("Pull Now")) return;
         var cts = _cancelSyncCts;
         if (cts is null) return;
-        UpdateStatusLabel("Syncing...");
+        UpdateStatusLabel("Pulling...");
         try
         {
-            AppendLog($"{DateTime.Now:HH:mm:ss} Sync Now initiated.");
+            AppendLog($"{DateTime.Now:HH:mm:ss} Pull Now initiated.");
             await Task.Run(() => _syncService.RunCycleAsync(cts.Token), cts.Token);
         }
         catch (OperationCanceledException)
         {
-            AppendLog($"{DateTime.Now:HH:mm:ss} Sync Now cancelled by user.");
+            AppendLog($"{DateTime.Now:HH:mm:ss} Pull Now cancelled by user.");
         }
         finally
         {
@@ -618,18 +640,18 @@ public partial class MainForm : Form
 
     private async Task RunPeekWebApiAsync(bool userInitiated = false)
     {
-        if (!TryBeginCancelableCommand("Peek in WebApi")) return;
-        UpdateStatusLabel("Peeking WebApi...");
+        if (!TryBeginCancelableCommand("Peek API data")) return;
+        UpdateStatusLabel("Peeking API...");
         try
         {
             if (userInitiated)
-                AppendLog($"{DateTime.Now:HH:mm:ss} Peek in WebApi initiated.");
+                AppendLog($"{DateTime.Now:HH:mm:ss} Peek API data initiated.");
 
             var selectedDate = DateOnly.FromDateTime(dtpDbDate.Value.Date).ToString("yyyy-MM-dd");
             var counts = await _api.GetLookupCountsAsync(selectedDate, _cancelSyncCts!.Token);
             if (counts is null)
             {
-                AppendLog($"{DateTime.Now:HH:mm:ss} Peek in WebApi failed: {_api.LastError ?? "no response"}");
+                AppendLog($"{DateTime.Now:HH:mm:ss} Peek API data failed: {_api.LastError ?? "no response"}");
                 return;
             }
 
@@ -637,7 +659,7 @@ public partial class MainForm : Form
         }
         catch (OperationCanceledException)
         {
-            AppendLog($"{DateTime.Now:HH:mm:ss} Peek in WebApi cancelled by user.");
+            AppendLog($"{DateTime.Now:HH:mm:ss} Peek API data cancelled by user.");
         }
         finally
         {
@@ -729,7 +751,7 @@ public partial class MainForm : Form
     private void btnCancelSync_Click(object sender, EventArgs e)
     {
         if (_cancelSyncCts is null || _cancelSyncCts.IsCancellationRequested) return;
-        if (string.Equals(_runningCommandName, "Auto-sync", StringComparison.Ordinal))
+        if (string.Equals(_runningCommandName, "Auto-pull", StringComparison.Ordinal))
             _syncService.CancelAutoSync();
         else
             _cancelSyncCts.Cancel();
@@ -740,13 +762,13 @@ public partial class MainForm : Form
     private void SyncService_AutoSyncStarted()
     {
         if (InvokeRequired) { Invoke(SyncService_AutoSyncStarted); return; }
-        if (!EnsureDbAvailableForPush("Auto-sync"))
+        if (!EnsureDbAvailableForPush("Auto-pull"))
         {
             _syncService.CancelAutoSync();
             return;
         }
         if (_cancelSyncCts is not null) return;
-        _runningCommandName = "Auto-sync";
+        _runningCommandName = "Auto-pull";
         _cancelSyncCts = new CancellationTokenSource();
         btnCancelSync.Enabled = true;
         btnSyncNow.Enabled = false;
@@ -759,14 +781,14 @@ public partial class MainForm : Form
         btnPeekWebApi.Enabled = false;
         btnPullPast.Enabled = false;
         btnDeleteTodayData.Enabled = false;
-        StartRunningStatus("Auto-sync");
-        AppendLog($"{DateTime.Now:HH:mm:ss} Auto-sync started.");
+        StartRunningStatus("Auto-pull");
+        AppendLog($"{DateTime.Now:HH:mm:ss} Auto-pull started.");
     }
 
     private void SyncService_AutoSyncFinished()
     {
         if (InvokeRequired) { Invoke(SyncService_AutoSyncFinished); return; }
-        if (!string.Equals(_runningCommandName, "Auto-sync", StringComparison.Ordinal)) return;
+        if (!string.Equals(_runningCommandName, "Auto-pull", StringComparison.Ordinal)) return;
         _cancelSyncCts?.Dispose();
         _cancelSyncCts = null;
         _runningCommandName = null;
@@ -815,7 +837,7 @@ public partial class MainForm : Form
         _settings.Save();
         if (_settings.AutoSyncEnabled)
         {
-            if (!EnsureDbAvailableForPush("Auto-sync"))
+            if (!EnsureDbAvailableForPush("Auto-pull"))
             {
                 _settings.AutoSyncEnabled = false;
                 _settings.Save();

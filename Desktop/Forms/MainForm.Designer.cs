@@ -22,7 +22,9 @@ partial class MainForm
     private Label lblIntervalUnit;
     private Label lblLastSyncCaption, lblLastSync;
     private CheckBox chkTestMode;
-    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnUploadNewRunners, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync;
+    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnUploadNewRunners, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, btnAdvancedToggle;
+    private Panel panelAdvancedContent;
+    private FlowLayoutPanel flowAdvanced;
     private Label lblStatus;
     private TextBox txtLog;
     private Label lblLogCaption;
@@ -117,10 +119,10 @@ partial class MainForm
         };
         y += 40;
 
-        // ── Auto-sync row ─────────────────────────────────────────────────────
+        // ── Auto-pull row ─────────────────────────────────────────────────────
         chkAutoSync = new CheckBox
         {
-            Text = "Auto-sync enabled",
+            Text = "Auto-pull enabled",
             Location = new System.Drawing.Point(10, y),
             AutoSize = true
         };
@@ -159,120 +161,160 @@ partial class MainForm
         };
         y += 10;
 
-        // ── Action buttons ────────────────────────────────────────────────────
+        // ── Action buttons (one row) ──────────────────────────────────────────
+        const int btnRowH = 28;
+        int yAct = y;
+        int xAct = 10;
+
         btnSyncNow = new Button
         {
-            Text = "Sync Now",
-            Location = new System.Drawing.Point(10, y),
-            Size = new System.Drawing.Size(115, 30)
+            Text = "Pull Now",
+            Location = new System.Drawing.Point(xAct, yAct),
+            Size = new System.Drawing.Size(72, btnRowH)
         };
         btnSyncNow.Click += btnSyncNow_Click;
+        xAct += 72 + 4;
+
+        btnPushAllChanges = new Button
+        {
+            Text = "Push all changes",
+            Location = new System.Drawing.Point(xAct, yAct),
+            Size = new System.Drawing.Size(108, btnRowH)
+        };
+        btnPushAllChanges.Click += btnPushAllChanges_Click;
+        tipUi.SetToolTip(btnPushAllChanges, "Sync then push all eligible DBISAM rows; API applies only real diffs");
+        xAct += 108 + 4;
+
+        btnPushClubs = new Button
+        {
+            Text = "Push Clubs",
+            Location = new System.Drawing.Point(xAct, yAct),
+            Size = new System.Drawing.Size(86, btnRowH)
+        };
+        btnPushClubs.Click += btnPushClubs_Click;
+        xAct += 86 + 4;
+
+        btnPushClasses = new Button
+        {
+            Text = "Push Classes",
+            Location = new System.Drawing.Point(xAct, yAct),
+            Size = new System.Drawing.Size(94, btnRowH)
+        };
+        btnPushClasses.Click += btnPushClasses_Click;
+        xAct += 94 + 4;
+
+        btnPullPast = new Button
+        {
+            Text = "Pull Past",
+            Location = new System.Drawing.Point(xAct, yAct),
+            Size = new System.Drawing.Size(80, btnRowH)
+        };
+        btnPullPast.Click += btnPullPast_Click;
+        xAct += 80 + 4;
+
+        btnPeekWebApi = new Button
+        {
+            Text = "Peek API data",
+            Location = new System.Drawing.Point(xAct, yAct),
+            Size = new System.Drawing.Size(118, btnRowH)
+        };
+        btnPeekWebApi.Click += btnPeekWebApi_Click;
+
+        int yAdv = yAct + btnRowH + 4;
+        btnAdvancedToggle = new Button
+        {
+            Text = "▶ Advanced",
+            Location = new System.Drawing.Point(10, yAdv),
+            Size = new System.Drawing.Size(760, 26),
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        btnAdvancedToggle.Click += btnAdvancedToggle_Click;
+
+        int yPanel = yAdv + 26 + 2;
+        panelAdvancedContent = new Panel
+        {
+            Location = new System.Drawing.Point(10, yPanel),
+            Size = new System.Drawing.Size(760, 74),
+            Visible = false
+        };
+        flowAdvanced = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            AutoSize = false,
+            Padding = new Padding(0)
+        };
+        panelAdvancedContent.Controls.Add(flowAdvanced);
 
         btnForcePush = new Button
         {
             Text = "Force Push All",
-            Location = new System.Drawing.Point(130, y),
-            Size = new System.Drawing.Size(105, 30)
+            Size = new System.Drawing.Size(105, 30),
+            Margin = new Padding(0, 0, 8, 8)
         };
         btnForcePush.Click += btnForcePush_Click;
 
         btnForcePushRange = new Button
         {
             Text = "Push selected",
-            Location = new System.Drawing.Point(240, y),
-            Size = new System.Drawing.Size(105, 30)
+            Size = new System.Drawing.Size(105, 30),
+            Margin = new Padding(0, 0, 8, 8)
         };
         btnForcePushRange.Click += btnForcePushRange_Click;
         tipUi.SetToolTip(btnForcePushRange, "Force push an inclusive range of start numbers from DBISAM");
 
-        btnPushClubs = new Button
-        {
-            Text = "Push Clubs",
-            Location = new System.Drawing.Point(350, y),
-            Size = new System.Drawing.Size(95, 30)
-        };
-        btnPushClubs.Click += btnPushClubs_Click;
-
-        btnPullPast = new Button
-        {
-            Text = "Pull Past",
-            Location = new System.Drawing.Point(450, y),
-            Size = new System.Drawing.Size(95, 30)
-        };
-        btnPullPast.Click += btnPullPast_Click;
-
         btnDeleteTodayData = new Button
         {
             Text = "Delete Today",
-            Location = new System.Drawing.Point(550, y),
-            Size = new System.Drawing.Size(88, 30)
+            Size = new System.Drawing.Size(88, 30),
+            Margin = new Padding(0, 0, 8, 8)
         };
         btnDeleteTodayData.Click += btnDeleteTodayData_Click;
-
-        btnDbExplorer = new Button
-        {
-            Text = "E",
-            Location = new System.Drawing.Point(645, y),
-            Size = new System.Drawing.Size(28, 30)
-        };
-        btnDbExplorer.Click += btnDbExplorer_Click;
-
-        btnPeekWebApi = new Button
-        {
-            Text = "Peek in WebApi",
-            Location = new System.Drawing.Point(678, y),
-            Size = new System.Drawing.Size(112, 30)
-        };
-        btnPeekWebApi.Click += btnPeekWebApi_Click;
-
-        btnCancelSync = new Button
-        {
-            Text = "Cancel",
-            Location = new System.Drawing.Point(10, y + 34),
-            Size = new System.Drawing.Size(110, 30),
-            Enabled = false
-        };
-        btnCancelSync.Click += btnCancelSync_Click;
 
         btnUploadNewRunners = new Button
         {
             Text = "Upload new",
-            Location = new System.Drawing.Point(125, y + 34),
-            Size = new System.Drawing.Size(110, 30)
+            Size = new System.Drawing.Size(110, 30),
+            Margin = new Padding(0, 0, 8, 8)
         };
         btnUploadNewRunners.Click += btnUploadNewRunners_Click;
         tipUi.SetToolTip(btnUploadNewRunners, "Upload DBISAM runners missing on API or changed vs Registered/DNS (e.g. after MldKen changes)");
 
-        btnPushAllChanges = new Button
+        btnDbExplorer = new Button
         {
-            Text = "Push all changes",
-            Location = new System.Drawing.Point(240, y + 34),
-            Size = new System.Drawing.Size(115, 30)
+            Text = "E",
+            Size = new System.Drawing.Size(28, 30),
+            Margin = new Padding(0, 0, 8, 8)
         };
-        btnPushAllChanges.Click += btnPushAllChanges_Click;
-        tipUi.SetToolTip(btnPushAllChanges, "Sync then push all eligible DBISAM rows; API applies only real diffs");
+        btnDbExplorer.Click += btnDbExplorer_Click;
 
-        btnPushClasses = new Button
+        flowAdvanced.Controls.Add(btnForcePush);
+        flowAdvanced.Controls.Add(btnForcePushRange);
+        flowAdvanced.Controls.Add(btnDeleteTodayData);
+        flowAdvanced.Controls.Add(btnUploadNewRunners);
+        flowAdvanced.Controls.Add(btnDbExplorer);
+
+        int yStatusRow = yAdv + 26 + 8;
+        btnCancelSync = new Button
         {
-            Text = "Push Classes",
-            Location = new System.Drawing.Point(360, y + 34),
-            Size = new System.Drawing.Size(100, 30)
+            Text = "Cancel",
+            Location = new System.Drawing.Point(10, yStatusRow),
+            Size = new System.Drawing.Size(88, btnRowH),
+            Enabled = false
         };
-        btnPushClasses.Click += btnPushClasses_Click;
+        btnCancelSync.Click += btnCancelSync_Click;
 
-        y += 38;
-        lblStatus = MakeLabel("Status: Idle", 130, y, 260);
-        y += 28;
+        lblStatus = MakeLabel("Status: Idle", 10 + 88 + 6, yStatusRow, 560);
 
         // ── Log ───────────────────────────────────────────────────────────────
-        lblLogCaption = MakeLabel("Log:", 10, y, 50);
-        y += 20;
+        lblLogCaption = MakeLabel("Log:", 10, yStatusRow + 28, 50);
         txtLog = new TextBox
         {
             Multiline = true,
             ReadOnly = true,
             ScrollBars = ScrollBars.Vertical,
-            Location = new System.Drawing.Point(10, y),
+            Location = new System.Drawing.Point(10, yStatusRow + 48),
             Size = new System.Drawing.Size(760, 300),
             Font = new System.Drawing.Font("Consolas", 8.5f),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom
@@ -286,7 +328,9 @@ partial class MainForm
             chkAutoSync, lblIntervalCaption, nudInterval, lblIntervalUnit,
             lblLastSyncCaption, lblLastSync, chkTestMode,
             sep,
-            btnSyncNow, btnForcePush, btnForcePushRange, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, btnUploadNewRunners, btnPushAllChanges, btnPushClasses, lblStatus,
+            btnSyncNow, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnPeekWebApi,
+            btnAdvancedToggle, panelAdvancedContent,
+            btnCancelSync, lblStatus,
             lblLogCaption, txtLog
         });
     }

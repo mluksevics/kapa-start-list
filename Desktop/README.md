@@ -46,16 +46,20 @@ Implementation split:
 
 | Button | Behaviour |
 |--------|-----------|
-| **Sync Now** | Runs one regular cycle immediately (PULL → write back to DBISAM) |
+| **Pull Now** | Runs one regular cycle immediately (PULL → write back to DBISAM) |
+| **Push all changes** | Sync first, then bulk-uploads eligible DBISAM rows; API updates only rows that actually differ |
+| **Push Clubs** | Reads clubs from DBISAM and upserts them to the API `/api/lookups/clubs` table |
+| **Push Classes** | Reads classes from DBISAM and upserts them to the API `/api/lookups/classes` table |
+| **Pull Past** | Opens a dialog to pull changes from the last N minutes (10/15/30/60/240 or custom). Useful after a connectivity gap. |
+| **Peek API data** | Reads current API SQL row counts (competitors/clubs/classes) and logs them |
+| **Advanced** (▶ collapsed by default) | Expands to show **Force Push All**, **Push selected**, **Delete Today**, **Upload new**, and **E** (DB Explorer — ad-hoc DbBridge DLL calls and diagnostics) |
+| **Cancel** | Below the Advanced row; on the left of the status line — cancels the currently running operation |
 | **Force Push All** | Regular sync first, then scans DBISAM 1–4000 and bulk-uploads everything. Use after correcting data in OE12. |
 | **Push selected** | Regular sync first, then scans only an inclusive start-number range from DBISAM and bulk-uploads those rows. |
-| **Push Clubs** | Reads clubs from DBISAM and upserts them to the API `/api/lookups/clubs` table |
-| **Peek in WebApi** | Reads current API SQL row counts (competitors/clubs/classes) and logs them |
-| **Pull Past** | Opens a dialog to pull changes from the last N minutes (10/15/30/60/240 or custom). Useful after a connectivity gap. |
-| **Cancel** | Cancels the currently running operation |
-| **DB Explorer** | Opens the DbBridge explorer window for ad-hoc DLL calls and diagnostics |
+| **Delete Today** | Deletes all competition data for the selected API date (with confirmation) |
+| **Upload new** | Uploads DBISAM runners missing on the API or changed vs Registered/DNS |
 
-At app startup, **Peek in WebApi** runs automatically once.
+At app startup, **Peek API data** runs automatically once.
 
 ---
 
@@ -76,7 +80,7 @@ Errors and warnings trigger a descending-tone beep (if failure sound is enabled,
 | DB Path | Path to the DBISAM database folder (browse button) |
 | Device Name | Identifier sent as `lastModifiedBy` on every upload (default: `desktop`) |
 | Day / Stage | Which OE12 stage/day to sync (loaded from DBISAM Etap table, auto-selects today) |
-| Auto-sync | Enable/disable automatic sync on the interval |
+| Auto-pull | Enable/disable automatic pull on the interval |
 | Interval | Sync interval in seconds (default: 60) |
 | DB Code Page | ANSI code page for DbBridge string encoding (default: 1257 for Baltic languages) |
 | Failure Sound | Toggle the error beep on/off |

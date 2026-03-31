@@ -390,7 +390,7 @@ public class SyncService
         }
         catch (OperationCanceledException)
         {
-            _log($"{Ts()} Auto-sync cancelled.");
+            _log($"{Ts()} Auto-pull cancelled.");
         }
         finally
         {
