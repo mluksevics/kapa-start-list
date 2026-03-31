@@ -36,7 +36,10 @@ import javax.inject.Inject
 
 sealed interface StartListItem {
     data class Header(val timeMinute: Long, val isCurrent: Boolean) : StartListItem
-    data class Row(val runner: RunnerEntity) : StartListItem
+    data class Row(
+        val runner: RunnerEntity,
+        val highlightFields: Set<String> = emptySet()
+    ) : StartListItem
 }
 
 @HiltViewModel
@@ -62,6 +65,8 @@ class StartListViewModel @Inject constructor(
 
     private val _autoScrollEnabled = MutableStateFlow(false)
     val autoScrollEnabled: StateFlow<Boolean> = _autoScrollEnabled.asStateFlow()
+
+    private val _runnerFieldHighlights = MutableStateFlow<Map<Int, Set<String>>>(emptyMap())
 
     val settings: StateFlow<AppSettings> = settingsDataStore.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings.DEFAULT)
@@ -89,13 +94,14 @@ class StartListViewModel @Inject constructor(
     val startListItems: StateFlow<List<StartListItem>> = combine(
         repository.observeRunners(),
         currentTimeMinute,
-        settings
-    ) { runners, timeMinute, appSettings ->
+        settings,
+        _runnerFieldHighlights
+    ) { runners, timeMinute, appSettings, highlights ->
         val s = appSettings
         val adjustedMinute = timeMinute - s.lateStartMinutes - s.prestartMinutes
         val tod = ((adjustedMinute.toInt() % (24 * 60)) + (24 * 60)) % (24 * 60)
         val filtered = if (s.startPlace == 0) runners else runners.filter { it.startPlace == s.startPlace }
-        buildItems(filtered, tod)
+        buildItems(filtered, tod, highlights)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private var lastAlertMinute = -1L
@@ -120,6 +126,18 @@ class StartListViewModel @Inject constructor(
             syncManager.syncDeltas.collect { delta ->
                 if (delta.classNamesChanged > 0 || delta.clubNamesChanged > 0) {
                     _message.value = "Changes synced: classes ${delta.classNamesChanged}, clubs ${delta.clubNamesChanged}"
+                }
+                if (delta.runnerFieldHighlights.isNotEmpty()) {
+                    for ((startNr, fields) in delta.runnerFieldHighlights) {
+                        val newSet = (_runnerFieldHighlights.value[startNr] ?: emptySet()) + fields
+                        _runnerFieldHighlights.update { it + (startNr to newSet) }
+                        viewModelScope.launch {
+                            delay(8_000)
+                            _runnerFieldHighlights.update { cur ->
+                                if (cur[startNr] == newSet) cur.filterKeys { it != startNr } else cur
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -173,12 +191,18 @@ class StartListViewModel @Inject constructor(
         }.coerceAtLeast(0)
     }
 
-    private fun buildItems(runners: List<RunnerEntity>, highlightedTod: Int): List<StartListItem> = buildList {
+    private fun buildItems(
+        runners: List<RunnerEntity>,
+        highlightedTod: Int,
+        highlightFields: Map<Int, Set<String>>
+    ): List<StartListItem> = buildList {
         runners.groupBy { it.startTime.minuteBoundary() }
             .entries.sortedBy { it.key }
             .forEach { (minute, group) ->
                 add(StartListItem.Header(minute, minute.minuteOfDay() == highlightedTod))
-                group.sortedBy { it.startNumber }.forEach { add(StartListItem.Row(it)) }
+                group.sortedBy { it.startNumber }.forEach {
+                    add(StartListItem.Row(it, highlightFields[it.startNumber].orEmpty()))
+                }
             }
     }
 

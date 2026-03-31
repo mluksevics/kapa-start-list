@@ -34,6 +34,7 @@ Status transitions are **forward-only**: once a runner is Started or DNS they ca
 
 - Every ~30 seconds: `GET /api/competitions/{today}/runners?changedSince={watermark}`
 - Applied fields from server: name, surname, siChipNo, clubName, country, startPlace, statusId
+- Optional **`changedFields`** on each runner (changelog-backed): lists which columns changed since the watermark. The app uses this only for **short-lived UI highlights** on the start list (bold / tint on the affected columns). Full row values are still merged as before; `changedFields` is omitted on full fetch or when the server has no audit rows in the window.
 - `className` is **never** updated from the server — it is immutable after initial upload
 - Watermark (`serverTimeUtc`) is stored in DataStore
 

@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -28,6 +30,7 @@ import com.orienteering.startref.ui.theme.DnsRed
 @Composable
 fun RunnerRow(
     runner: RunnerEntity,
+    highlightFields: Set<String> = emptySet(),
     onCheckIn: () -> Unit,
     onDns: () -> Unit,
     onEdit: () -> Unit,
@@ -41,16 +44,26 @@ fun RunnerRow(
         else -> Color.White
     }
 
+    fun hl(field: String) = highlightFields.contains(field)
+
+    val hlColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+    val rowModifier = Modifier
+        .fillMaxWidth()
+        .background(bg)
+        .then(
+            if (hl("StartTime")) Modifier.background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f))
+            else Modifier
+        )
+        .padding(vertical = 4.dp)
+
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(bg)
-            .padding(vertical = 4.dp),
+        modifier = rowModifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
                 .size(52.dp)
+                .then(if (hl("StatusId")) Modifier.background(hlColor) else Modifier)
                 .combinedClickable(
                     onClick = onCheckIn,
                     onLongClick = onDns
@@ -66,13 +79,19 @@ fun RunnerRow(
         Text(
             text = "${runner.startNumber}",
             fontSize = fontSize,
-            modifier = Modifier.width(56.dp)
+            fontWeight = if (hl("StartPlace")) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier
+                .width(56.dp)
+                .then(if (hl("StartPlace")) Modifier.background(hlColor) else Modifier)
         )
 
         Text(
             text = runner.className,
             fontSize = fontSize,
-            modifier = Modifier.width(90.dp),
+            fontWeight = if (hl("ClassId")) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier
+                .width(90.dp)
+                .then(if (hl("ClassId")) Modifier.background(hlColor) else Modifier),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -80,15 +99,22 @@ fun RunnerRow(
         Text(
             text = runner.siCard,
             fontSize = fontSize,
-            modifier = Modifier.width(96.dp),
+            fontWeight = if (hl("SiChipNo")) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier
+                .width(96.dp)
+                .then(if (hl("SiChipNo")) Modifier.background(hlColor) else Modifier),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
 
+        val nameHl = hl("Name") || hl("Surname")
         Text(
             text = "${runner.name} ${runner.surname}",
             fontSize = fontSize,
-            modifier = Modifier.weight(1f),
+            fontWeight = if (nameHl) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier
+                .weight(1f)
+                .then(if (nameHl) Modifier.background(hlColor) else Modifier),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -96,7 +122,10 @@ fun RunnerRow(
         Text(
             text = runner.clubName,
             fontSize = fontSize,
-            modifier = Modifier.width(100.dp),
+            fontWeight = if (hl("ClubId")) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier
+                .width(100.dp)
+                .then(if (hl("ClubId")) Modifier.background(hlColor) else Modifier),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

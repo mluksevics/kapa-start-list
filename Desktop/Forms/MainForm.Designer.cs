@@ -22,7 +22,7 @@ partial class MainForm
     private Label lblIntervalUnit;
     private Label lblLastSyncCaption, lblLastSync;
     private CheckBox chkTestMode;
-    private Button btnSyncNow, btnForcePush, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync;
+    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync;
     private Label lblStatus;
     private TextBox txtLog;
     private Label lblLogCaption;
@@ -164,55 +164,64 @@ partial class MainForm
         {
             Text = "Sync Now",
             Location = new System.Drawing.Point(10, y),
-            Size = new System.Drawing.Size(120, 30)
+            Size = new System.Drawing.Size(115, 30)
         };
         btnSyncNow.Click += btnSyncNow_Click;
 
         btnForcePush = new Button
         {
             Text = "Force Push All",
-            Location = new System.Drawing.Point(140, y),
-            Size = new System.Drawing.Size(120, 30)
+            Location = new System.Drawing.Point(130, y),
+            Size = new System.Drawing.Size(105, 30)
         };
         btnForcePush.Click += btnForcePush_Click;
+
+        btnForcePushRange = new Button
+        {
+            Text = "Push selected",
+            Location = new System.Drawing.Point(240, y),
+            Size = new System.Drawing.Size(105, 30)
+        };
+        btnForcePushRange.Click += btnForcePushRange_Click;
+        tipUi.SetToolTip(btnForcePushRange, "Force push an inclusive range of start numbers from DBISAM");
 
         btnPushClubs = new Button
         {
             Text = "Push Clubs",
-            Location = new System.Drawing.Point(270, y),
-            Size = new System.Drawing.Size(110, 30)
+            Location = new System.Drawing.Point(350, y),
+            Size = new System.Drawing.Size(95, 30)
         };
         btnPushClubs.Click += btnPushClubs_Click;
 
         btnPullPast = new Button
         {
             Text = "Pull Past",
-            Location = new System.Drawing.Point(390, y),
-            Size = new System.Drawing.Size(110, 30)
+            Location = new System.Drawing.Point(450, y),
+            Size = new System.Drawing.Size(95, 30)
         };
         btnPullPast.Click += btnPullPast_Click;
 
         btnDeleteTodayData = new Button
         {
             Text = "Delete Today",
-            Location = new System.Drawing.Point(510, y),
-            Size = new System.Drawing.Size(100, 30)
+            Location = new System.Drawing.Point(550, y),
+            Size = new System.Drawing.Size(88, 30)
         };
         btnDeleteTodayData.Click += btnDeleteTodayData_Click;
 
         btnDbExplorer = new Button
         {
             Text = "E",
-            Location = new System.Drawing.Point(620, y),
-            Size = new System.Drawing.Size(30, 30)
+            Location = new System.Drawing.Point(645, y),
+            Size = new System.Drawing.Size(28, 30)
         };
         btnDbExplorer.Click += btnDbExplorer_Click;
 
         btnPeekWebApi = new Button
         {
             Text = "Peek in WebApi",
-            Location = new System.Drawing.Point(660, y),
-            Size = new System.Drawing.Size(110, 30)
+            Location = new System.Drawing.Point(678, y),
+            Size = new System.Drawing.Size(112, 30)
         };
         btnPeekWebApi.Click += btnPeekWebApi_Click;
 
@@ -251,7 +260,7 @@ partial class MainForm
             chkAutoSync, lblIntervalCaption, nudInterval, lblIntervalUnit,
             lblLastSyncCaption, lblLastSync, chkTestMode,
             sep,
-            btnSyncNow, btnForcePush, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, lblStatus,
+            btnSyncNow, btnForcePush, btnForcePushRange, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, lblStatus,
             lblLogCaption, txtLog
         });
     }

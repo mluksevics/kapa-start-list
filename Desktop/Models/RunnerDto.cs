@@ -48,4 +48,7 @@ public class RunnerDto
 
     [JsonPropertyName("lastModifiedBy")]
     public string LastModifiedBy { get; set; } = "";
+
+    [JsonPropertyName("changedFields")]
+    public List<string>? ChangedFields { get; set; }
 }

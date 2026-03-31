@@ -32,7 +32,8 @@ class SyncManager @Inject constructor(
     data class SyncDelta(
         val runnersChanged: Int,
         val classNamesChanged: Int,
-        val clubNamesChanged: Int
+        val clubNamesChanged: Int,
+        val runnerFieldHighlights: Map<Int, Set<String>> = emptyMap()
     )
 
     private val _syncDeltas = MutableSharedFlow<SyncDelta>(extraBufferCapacity = 16)
@@ -58,18 +59,26 @@ class SyncManager @Inject constructor(
             val changedSince = settings.lastServerTimeUtc.takeIf { it > 0 }
             val result = apiClient.getRunners(settings.competitionDate, changedSince, settings) ?: return
 
-            var runnersChanged = 0
-            result.runners.forEach { dto -> mergeRunner(dto, settings.competitionDate) }
-            runnersChanged = result.runners.size
+            val runnersChanged = result.runners.size
+            val fieldHighlights = buildMap<Int, MutableSet<String>> {
+                result.runners.forEach { dto ->
+                    mergeRunner(dto, settings.competitionDate)
+                    val cf = dto.changedFields
+                    if (!cf.isNullOrEmpty()) {
+                        getOrPut(dto.startNumber) { mutableSetOf() }.addAll(cf)
+                    }
+                }
+            }.mapValues { it.value.toSet() }
             val classNamesChanged = syncClassLookups(settings)
             val clubNamesChanged = syncClubLookups(settings)
             settingsDataStore.updateLastServerTimeUtc(result.serverTimeUtc)
-            if (runnersChanged > 0 || classNamesChanged > 0 || clubNamesChanged > 0) {
+            if (runnersChanged > 0 || classNamesChanged > 0 || clubNamesChanged > 0 || fieldHighlights.isNotEmpty()) {
                 _syncDeltas.tryEmit(
                     SyncDelta(
                         runnersChanged = runnersChanged,
                         classNamesChanged = classNamesChanged,
-                        clubNamesChanged = clubNamesChanged
+                        clubNamesChanged = clubNamesChanged,
+                        runnerFieldHighlights = fieldHighlights
                     )
                 )
             }
@@ -126,7 +135,8 @@ class SyncManager @Inject constructor(
                 SyncDelta(
                     runnersChanged = toInsert.size + toUpdate.size,
                     classNamesChanged = classNamesChanged,
-                    clubNamesChanged = clubNamesChanged
+                    clubNamesChanged = clubNamesChanged,
+                    runnerFieldHighlights = emptyMap()
                 )
             )
         } finally {

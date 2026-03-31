@@ -28,7 +28,8 @@ data class RunnerDto(
     val startPlace: Int,
     val startTime: String?,
     val lastModifiedUtc: Long,
-    val lastModifiedBy: String
+    val lastModifiedBy: String,
+    val changedFields: List<String>? = null
 )
 
 data class GetRunnersResult(
@@ -120,6 +121,10 @@ class ApiClient(
                 val runnersArray = json.getJSONArray("runners")
                 val runners = (0 until runnersArray.length()).map { i ->
                     val r = runnersArray.getJSONObject(i)
+                    val cfJson = r.optJSONArray("changedFields")
+                    val changedFields = if (cfJson != null && cfJson.length() > 0) {
+                        (0 until cfJson.length()).map { j -> cfJson.getString(j) }
+                    } else null
                     RunnerDto(
                         startNumber = r.getInt("startNumber"),
                         siChipNo = r.optString("siChipNo").takeIf { it.isNotEmpty() },
@@ -135,7 +140,8 @@ class ApiClient(
                         startPlace = r.getInt("startPlace"),
                         startTime = r.optString("startTime").takeIf { it.isNotEmpty() },
                         lastModifiedUtc = parseIso(r.getString("lastModifiedUtc")),
-                        lastModifiedBy = r.getString("lastModifiedBy")
+                        lastModifiedBy = r.getString("lastModifiedBy"),
+                        changedFields = changedFields
                     )
                 }
                 GetRunnersResult(serverTimeUtc, runners)

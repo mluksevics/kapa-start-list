@@ -278,6 +278,7 @@ public partial class MainForm : Form
         {
             btnSyncNow.Enabled = enabled;
             btnForcePush.Enabled = enabled;
+            btnForcePushRange.Enabled = enabled;
             btnPushClubs.Enabled = enabled;
         }
     }
@@ -328,6 +329,7 @@ public partial class MainForm : Form
         btnCancelSync.Enabled = true;
         btnSyncNow.Enabled = false;
         btnForcePush.Enabled = false;
+        btnForcePushRange.Enabled = false;
         btnPushClubs.Enabled = false;
         btnPeekWebApi.Enabled = false;
         btnPullPast.Enabled = false;
@@ -344,6 +346,7 @@ public partial class MainForm : Form
         btnCancelSync.Enabled = false;
         btnSyncNow.Enabled = _pushActionsEnabled;
         btnForcePush.Enabled = _pushActionsEnabled;
+        btnForcePushRange.Enabled = _pushActionsEnabled;
         btnPushClubs.Enabled = _pushActionsEnabled;
         btnPeekWebApi.Enabled = true;
         btnPullPast.Enabled = true;
@@ -424,6 +427,47 @@ public partial class MainForm : Form
         catch (OperationCanceledException)
         {
             AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All cancelled by user.");
+        }
+        finally
+        {
+            EndCancelableCommand();
+            UpdateStatusLabel("Idle");
+        }
+    }
+
+    private async void btnForcePushRange_Click(object sender, EventArgs e)
+    {
+        if (!EnsureDbAvailableForPush("Push selected")) return;
+
+        using var dlg = new ForcePushRangeDialog();
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+        int fromNr = dlg.FromStartNumber;
+        int toNr = dlg.ToStartNumber;
+        int lo = Math.Min(fromNr, toNr);
+        int hi = Math.Max(fromNr, toNr);
+
+        if (MessageBox.Show(
+                $"Push selected will overwrite non-status fields on the server for start numbers {lo}–{hi} with current DBISAM values.\n\nContinue?",
+                "Confirm push selected",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning) != DialogResult.Yes)
+            return;
+
+        if (!TryBeginCancelableCommand("Push selected")) return;
+        var cts = _cancelSyncCts;
+        if (cts is null) return;
+        UpdateStatusLabel("Push selected...");
+        try
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push selected ({lo}–{hi}) step 1/2: running sync.");
+            await Task.Run(() => _syncService.RunCycleAsync(forcePush: false, cts.Token), cts.Token);
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push selected ({lo}–{hi}) step 2/2: uploading range.");
+            await Task.Run(() => _syncService.ForcePushSelectedAsync(fromNr, toNr, cts.Token), cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push selected cancelled by user.");
         }
         finally
         {
@@ -627,6 +671,7 @@ public partial class MainForm : Form
         btnCancelSync.Enabled = true;
         btnSyncNow.Enabled = false;
         btnForcePush.Enabled = false;
+        btnForcePushRange.Enabled = false;
         btnPushClubs.Enabled = false;
         btnPeekWebApi.Enabled = false;
         btnPullPast.Enabled = false;
@@ -645,6 +690,7 @@ public partial class MainForm : Form
         btnCancelSync.Enabled = false;
         btnSyncNow.Enabled = _pushActionsEnabled;
         btnForcePush.Enabled = _pushActionsEnabled;
+        btnForcePushRange.Enabled = _pushActionsEnabled;
         btnPushClubs.Enabled = _pushActionsEnabled;
         btnPeekWebApi.Enabled = true;
         btnPullPast.Enabled = true;

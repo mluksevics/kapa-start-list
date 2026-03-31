@@ -79,7 +79,15 @@ public class SyncService
     {
         var settings = _getSettings();
         var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
-        await UploadForcePushAsync(settings, date, ct);
+        await UploadForcePushAsync(settings, date, minStartNumber: 1, maxStartNumber: 4000, ct);
+    }
+
+    /// <summary>Force-push only runners whose start numbers fall in the inclusive range (clamped to 1–4000 on scan).</summary>
+    public async Task ForcePushSelectedAsync(int fromStartNumber, int toStartNumber, CancellationToken ct = default)
+    {
+        var settings = _getSettings();
+        var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
+        await UploadForcePushAsync(settings, date, fromStartNumber, toStartNumber, ct);
     }
 
     public async Task<int> PullUpdatesSinceAsync(DateTimeOffset changedSinceUtc, CancellationToken ct = default)
@@ -124,7 +132,7 @@ public class SyncService
 
         // 6. Bulk push
         if (forcePush)
-            await UploadForcePushAsync(settings, date, ct);
+            await UploadForcePushAsync(settings, date, minStartNumber: 1, maxStartNumber: 4000, ct);
         else if (pullResult.Runners.Count == 0)
             _log($"{Ts()} Sync: no changes from API.");
         else
@@ -135,11 +143,13 @@ public class SyncService
         settings.Save();
     }
 
-    private async Task UploadForcePushAsync(AppSettings settings, string date, CancellationToken ct = default)
+    private async Task UploadForcePushAsync(AppSettings settings, string date, int minStartNumber, int maxStartNumber, CancellationToken ct = default)
     {
-        _log($"{Ts()} Force Push: scanning DBISAM 1–4000 (workaround — ask Delphi dev for DbReadAllTeiln).");
+        int lo = Math.Min(minStartNumber, maxStartNumber);
+        int hi = Math.Max(minStartNumber, maxStartNumber);
+        _log($"{Ts()} Force Push: scanning DBISAM {lo}–{hi} (workaround — ask Delphi dev for DbReadAllTeiln).");
 
-        var runners = await Task.Run(() => _dbIsamRepository.ScanRunnersByStartNr(settings, ct), ct);
+        var runners = await Task.Run(() => _dbIsamRepository.ScanRunnersByStartNr(settings, minStartNumber, maxStartNumber, ct), ct);
         if (runners.Count == 0)
         {
             _log($"{Ts()} Force Push: no runners found in scan — check DB path.");

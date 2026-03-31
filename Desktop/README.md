@@ -12,10 +12,11 @@ Each regular cycle (auto or manual) runs these steps in order:
 1. PULL    GET /api/competitions/{today}/runners?changedSince={watermark}
            → receive all runner changes from field devices since last sync
 
-2. WRITE   For each changed runner (not modified by this desktop device):
-             • ChipNr   → DbChangeChipNrByStartNr
-             • KatNr    → DbChangeKatNrByStartNr
-             • StartTime → DbChangeStartTimeByStartNr
+2. WRITE   For each changed runner (not modified by this desktop device), using API `changedFields` when provided:
+             • ChipNr   → DbChangeChipNrByStartNr (only if `SiChipNo` is in `changedFields`, or if `changedFields` is omitted/null — legacy behaviour)
+             • KatNr    → DbChangeKatNrByStartNr (`ClassId`)
+             • StartTime → DbChangeStartTimeByStartNr (`StartTime`)
+             Name/club diagnostic logs respect the same hints. Omitted/null `changedFields` means treat all writable fields as candidates (value-compare against DBISAM as before).
            (DNS write-back is pending DLL support for DbChangeDnsByStartNr)
 
 3. WATERMARK  Save serverTimeUtc from the response for the next delta pull
@@ -37,6 +38,8 @@ Implementation split:
            → overwrites all non-status fields on the API; status escalation rules still apply
 ```
 
+**Push selected** (inclusive *from*…*to* start numbers): same flow as Force Push All, but the DBISAM scan is limited to the chosen range (still clamped to 1–4000). Opens a dialog for *From* / *To* bib numbers.
+
 ---
 
 ## Buttons
@@ -45,6 +48,7 @@ Implementation split:
 |--------|-----------|
 | **Sync Now** | Runs one regular cycle immediately (PULL → write back to DBISAM) |
 | **Force Push All** | Regular sync first, then scans DBISAM 1–4000 and bulk-uploads everything. Use after correcting data in OE12. |
+| **Push selected** | Regular sync first, then scans only an inclusive start-number range from DBISAM and bulk-uploads those rows. |
 | **Push Clubs** | Reads clubs from DBISAM and upserts them to the API `/api/lookups/clubs` table |
 | **Peek in WebApi** | Reads current API SQL row counts (competitors/clubs/classes) and logs them |
 | **Pull Past** | Opens a dialog to pull changes from the last N minutes (10/15/30/60/240 or custom). Useful after a connectivity gap. |

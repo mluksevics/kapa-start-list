@@ -18,8 +18,8 @@ public sealed record RunnerResponse(
     int StartPlace,
     string? StartTime,
     DateTimeOffset LastModifiedUtc,
-    string LastModifiedBy
-);
+    string LastModifiedBy,
+    IReadOnlyList<string>? ChangedFields = null);
 
 public sealed record GetRunnersResponse(
     DateTimeOffset ServerTimeUtc,

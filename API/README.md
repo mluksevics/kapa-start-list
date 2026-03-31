@@ -14,8 +14,10 @@ All mutation endpoints require the `X-Api-Key` header. GET endpoints are open.
 |--------|------|-------------|
 | `PUT` | `/api/competitions/{date}/runners` | Bulk upload from Desktop (upsert with status rules) |
 | `PATCH` | `/api/competitions/{date}/runners/{startNumber}` | Partial update from Android |
-| `GET` | `/api/competitions/{date}/runners[?changedSince=ISO]` | Full or delta fetch; returns `serverTimeUtc` |
+| `GET` | `/api/competitions/{date}/runners[?changedSince=ISO]` | Full or delta fetch; returns `serverTimeUtc` and runner rows (see `changedFields` below) |
 | `DELETE` | `/api/competitions/{date}/runners` | Clear all runners for a date |
+
+**GET runners — `changedFields` (delta pulls only):** When `changedSince` is present, each runner object may include `changedFields`: a string array of logical column names (`SiChipNo`, `Name`, `Surname`, `ClassId`, `ClubId`, `Country`, `StartPlace`, `StartTime`, `StatusId`) that had a changelog entry with `ChangedAtUtc` after the watermark. Names match `PATCH` / bulk upload audit log field names. If a runner appears in the delta but has no matching changelog rows in that window, `changedFields` is omitted (clients fall back to comparing full row values). When `changedSince` is omitted (full fetch), `changedFields` is omitted.
 
 ### Reference data
 

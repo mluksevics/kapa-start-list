@@ -21,9 +21,17 @@ public class DbIsamRepository
         _log = log;
     }
 
-    public List<BulkRunnerDto> ScanRunnersByStartNr(AppSettings settings, CancellationToken ct = default)
+    public List<BulkRunnerDto> ScanRunnersByStartNr(AppSettings settings, CancellationToken ct = default) =>
+        ScanRunnersByStartNr(settings, 1, 4000, ct);
+
+    /// <summary>Scans DBISAM for start numbers in inclusive <paramref name="minStartNumber"/>..<paramref name="maxStartNumber"/> (clamped to 1–4000).</summary>
+    public List<BulkRunnerDto> ScanRunnersByStartNr(AppSettings settings, int minStartNumber, int maxStartNumber, CancellationToken ct = default)
     {
-        const int maxStartNr = 4000;
+        const int absoluteMax = 4000;
+        int min = Math.Clamp(Math.Min(minStartNumber, maxStartNumber), 1, absoluteMax);
+        int max = Math.Clamp(Math.Max(minStartNumber, maxStartNumber), 1, absoluteMax);
+        int span = max - min + 1;
+
         var results = new List<BulkRunnerDto>();
 
         if (string.IsNullOrEmpty(settings.DbIsamPath))
@@ -39,9 +47,9 @@ public class DbIsamRepository
             return results;
         }
 
-        _log($"{Ts()} Scanning start numbers 1–{maxStartNr}...");
+        _log($"{Ts()} Scanning start numbers {min}–{max}...");
 
-        for (int startNr = 1; startNr <= maxStartNr; startNr++)
+        for (int startNr = min; startNr <= max; startNr++)
         {
             ct.ThrowIfCancellationRequested();
             try
@@ -94,11 +102,12 @@ public class DbIsamRepository
                     _log($"{Ts()} Check DB log: {DbBridgeService.DbErrorLogPath(settings.DbIsamPath)}");
             }
 
-            if (results.Count > 0 && results.Count % 100 == 0)
-                _log($"{Ts()} Scanned {startNr}/{maxStartNr}, found {results.Count} so far...");
+            int idxInRange = startNr - min + 1;
+            if (results.Count > 0 && (idxInRange % 100 == 0 || startNr == max))
+                _log($"{Ts()} Scanned {idxInRange}/{span} in range, found {results.Count} so far...");
         }
 
-        _log($"{Ts()} Scan complete: {results.Count} runners found in {maxStartNr} start numbers.");
+        _log($"{Ts()} Scan complete: {results.Count} runners found in start range {min}–{max}.");
         return results;
     }
 
@@ -121,17 +130,20 @@ public class DbIsamRepository
 
         var chipUpdates = pulledRunners
             .Where(r => !string.IsNullOrEmpty(r.SiChipNo) &&
-                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
+                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase) &&
+                        HintIncludes(r, "SiChipNo"))
             .ToList();
 
         var katUpdates = pulledRunners
             .Where(r => r.ClassId > 0 &&
-                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
+                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase) &&
+                        HintIncludes(r, "ClassId"))
             .ToList();
 
         var startTimeUpdates = pulledRunners
             .Where(r => r.StartTime != null &&
-                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
+                        !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase) &&
+                        HintIncludes(r, "StartTime"))
             .ToList();
 
         bool hasDbUpdates = chipUpdates.Count > 0 || katUpdates.Count > 0 || startTimeUpdates.Count > 0;
@@ -149,23 +161,38 @@ public class DbIsamRepository
                 foreach (var r in foreignUpdates)
                 {
                     ct.ThrowIfCancellationRequested();
+                    bool logName = HintIncludes(r, "Name");
+                    bool logSurname = HintIncludes(r, "Surname");
+                    bool logClub = HintIncludes(r, "ClubId");
+                    if (!logName && !logSurname && !logClub)
+                        continue;
+
                     var snapshot = GetSnapshot(db, snapshots, settings.DayNo, r.StartNumber);
                     if (snapshot is null) continue;
 
-                    if (TextEqual(snapshot.Name, r.Name))
-                        _log($"{Ts()} DBISAM Name #{r.StartNumber}: SKIP unchanged ('{r.Name}')");
-                    else
-                        _log($"{Ts()} DBISAM Name #{r.StartNumber}: NEEDS change ('{snapshot.Name ?? "-"}' → '{r.Name}') [not applied: DLL missing DbChangeNameByStartNr]");
+                    if (logName)
+                    {
+                        if (TextEqual(snapshot.Name, r.Name))
+                            _log($"{Ts()} DBISAM Name #{r.StartNumber}: SKIP unchanged ('{r.Name}')");
+                        else
+                            _log($"{Ts()} DBISAM Name #{r.StartNumber}: NEEDS change ('{snapshot.Name ?? "-"}' → '{r.Name}') [not applied: DLL missing DbChangeNameByStartNr]");
+                    }
 
-                    if (TextEqual(snapshot.Surname, r.Surname))
-                        _log($"{Ts()} DBISAM Surname #{r.StartNumber}: SKIP unchanged ('{r.Surname}')");
-                    else
-                        _log($"{Ts()} DBISAM Surname #{r.StartNumber}: NEEDS change ('{snapshot.Surname ?? "-"}' → '{r.Surname}') [not applied: DLL missing DbChangeSurnameByStartNr]");
+                    if (logSurname)
+                    {
+                        if (TextEqual(snapshot.Surname, r.Surname))
+                            _log($"{Ts()} DBISAM Surname #{r.StartNumber}: SKIP unchanged ('{r.Surname}')");
+                        else
+                            _log($"{Ts()} DBISAM Surname #{r.StartNumber}: NEEDS change ('{snapshot.Surname ?? "-"}' → '{r.Surname}') [not applied: DLL missing DbChangeSurnameByStartNr]");
+                    }
 
-                    if (snapshot.ClubId == r.ClubId && TextEqual(snapshot.ClubName, r.ClubName))
-                        _log($"{Ts()} DBISAM Club #{r.StartNumber}: SKIP unchanged ('{r.ClubName}'/{r.ClubId})");
-                    else
-                        _log($"{Ts()} DBISAM Club #{r.StartNumber}: NEEDS change ('{snapshot.ClubName ?? "-"}'/{snapshot.ClubId} → '{r.ClubName}'/{r.ClubId}) [not applied: DLL missing DbChangeClubNrByStartNr]");
+                    if (logClub)
+                    {
+                        if (snapshot.ClubId == r.ClubId && TextEqual(snapshot.ClubName, r.ClubName))
+                            _log($"{Ts()} DBISAM Club #{r.StartNumber}: SKIP unchanged ('{r.ClubName}'/{r.ClubId})");
+                        else
+                            _log($"{Ts()} DBISAM Club #{r.StartNumber}: NEEDS change ('{snapshot.ClubName ?? "-"}'/{snapshot.ClubId} → '{r.ClubName}'/{r.ClubId}) [not applied: DLL missing DbChangeClubNrByStartNr]");
+                    }
                 }
 
                 foreach (var r in chipUpdates)
@@ -238,6 +265,21 @@ public class DbIsamRepository
         int dnsCount = pulledRunners.Count(r => r.StatusId == 3);
         if (dnsCount > 0)
             _log($"{Ts()} [WARN] {dnsCount} DNS runner(s) NOT written to DBISAM — DLL lacks DbChangeDnsByStartNr.");
+    }
+
+    private static bool HintIncludes(RunnerDto r, string fieldName)
+    {
+        var hints = r.ChangedFields;
+        if (hints is null || hints.Count == 0)
+            return true;
+
+        foreach (var h in hints)
+        {
+            if (string.Equals(h, fieldName, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     private static string? GetField(Dictionary<string, string> fields, params string[] names)

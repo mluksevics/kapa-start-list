@@ -44,7 +44,28 @@ public static class RunnerEndpoints
             if (changedSince.HasValue)
                 query = query.Where(r => r.LastModifiedUtc > changedSince.Value);
 
-            var runners = (await query.OrderBy(r => r.StartNumber).ToListAsync())
+            var runnerEntities = await query.OrderBy(r => r.StartNumber).ToListAsync();
+
+            IReadOnlyDictionary<int, IReadOnlyList<string>>? changedFieldsByStart = null;
+            if (changedSince.HasValue && runnerEntities.Count > 0)
+            {
+                var startNumbers = runnerEntities.Select(r => r.StartNumber).ToList();
+                var logRows = await db.ChangeLogEntries.AsNoTracking()
+                    .Where(e =>
+                        e.CompetitionDate == competitionDate &&
+                        e.ChangedAtUtc > changedSince.Value &&
+                        startNumbers.Contains(e.StartNumber))
+                    .Select(e => new { e.StartNumber, e.FieldName })
+                    .ToListAsync();
+
+                changedFieldsByStart = logRows
+                    .GroupBy(e => e.StartNumber)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => (IReadOnlyList<string>)g.Select(e => e.FieldName).Distinct(StringComparer.Ordinal).ToList());
+            }
+
+            var runners = runnerEntities
                 .Select(r => new RunnerResponse(
                     r.CompetitionDate,
                     r.StartNumber,
@@ -61,7 +82,10 @@ public static class RunnerEndpoints
                     r.StartPlace,
                     r.StartTime?.ToString("HH:mm:ss"),
                     r.LastModifiedUtc,
-                    r.LastModifiedBy))
+                    r.LastModifiedBy,
+                    changedSince.HasValue && changedFieldsByStart is not null && changedFieldsByStart.TryGetValue(r.StartNumber, out var fields)
+                        ? fields
+                        : null))
                 .ToList();
 
             return Results.Ok(new GetRunnersResponse(serverTimeUtc, runners));

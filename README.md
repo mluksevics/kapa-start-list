@@ -36,7 +36,7 @@ Android (referee/gate)
 ```
 
 **Sync flow (Desktop, regular cycle, every ~60 s):**
-1. Pull deltas from API (`GET /runners?changedSince={watermark}`) to receive field updates
+1. Pull deltas from API (`GET /runners?changedSince={watermark}`) to receive field updates (each runner may include changelog-backed `changedFields` so only relevant columns are considered for DBISAM writes)
 2. Compare pulled values vs current DBISAM values
 3. Write only changed ChipNr/KatNr/StartTime back to DBISAM via DbBridge DLL
 4. Save server timestamp as watermark for next delta pull
@@ -48,7 +48,7 @@ Android (referee/gate)
 4. API updates non-status fields; status never downgrades
 
 **Sync flow (Android, every ~30 s):**
-- Delta poll: `GET /runners?changedSince={watermark}`
+- Delta poll: `GET /runners?changedSince={watermark}` (optional per-runner `changedFields` drives brief UI highlights on the start list)
 - Forward-only status merge: Started and DNS are applied, never downgraded
 
 **Android gate:**
