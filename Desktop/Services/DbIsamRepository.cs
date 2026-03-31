@@ -60,6 +60,14 @@ public class DbIsamRepository
                     if (infoResult.Success && !string.IsNullOrEmpty(infoRaw))
                     {
                         var fields = DbBridgeService.ParseTeilnInfo(infoRaw);
+
+                        var mldKen = GetField(fields, $"MldKen{settings.DayNo}");
+                        if (string.Equals(mldKen, "False", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _log($"{Ts()} Scan startNr={startNr}: skipped (MldKen{settings.DayNo}=False)");
+                            continue;
+                        }
+
                         dto.Surname = GetField(fields, "Name") ?? "";
                         dto.Name = GetField(fields, "Vorname") ?? "";
                         dto.ClassId = int.TryParse(GetField(fields, "KatNr"), out var katNr) ? katNr : 0;

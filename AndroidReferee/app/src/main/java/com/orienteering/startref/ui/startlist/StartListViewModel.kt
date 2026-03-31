@@ -129,8 +129,8 @@ class StartListViewModel @Inject constructor(
 
     fun selectRunner(runner: RunnerEntity?) { _selectedRunner.value = runner }
 
-    fun markStarted(startNumber: Int) {
-        viewModelScope.launch { repository.markStarted(startNumber) }
+    fun toggleStarted(startNumber: Int) {
+        viewModelScope.launch { repository.toggleStarted(startNumber) }
     }
 
     fun toggleDns(startNumber: Int) {

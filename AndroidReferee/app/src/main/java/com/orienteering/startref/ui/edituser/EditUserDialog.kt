@@ -65,6 +65,7 @@ fun EditUserDialog(
     var selectedClubEntry by remember { mutableStateOf(ClubEntry(runner.clubId, runner.clubName)) }
     var clubDropdownExpanded by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var saveAttempted by remember { mutableStateOf(false) }
 
     val timePickerState = rememberTimePickerState(
         initialHour = initialDateTime.hour,
@@ -77,6 +78,12 @@ fun EditUserDialog(
         val truncated = (now / 60_000) * 60_000
         return truncated + (minutes * 60_000L)
     }
+
+    val siCardValid = siCard.trim().isNotBlank()
+    val classValid = selectedClassEntry.classId != 0 && selectedClassEntry.className.isNotBlank()
+    val clubValid = selectedClubEntry.clubId != 0 && selectedClubEntry.clubName.isNotBlank()
+    // year-2000 threshold — guards against epoch-0 placeholder start times
+    val startTimeValid = runner.startTime > 946_684_800_000L
 
     fun buildUpdatedRunner(): RunnerEntity {
         val existingDateTime = LocalDateTime.ofInstant(
@@ -151,7 +158,11 @@ fun EditUserDialog(
                     label = { Text("SI Card") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    isError = saveAttempted && !siCardValid,
+                    supportingText = if (saveAttempted && !siCardValid) {
+                        { Text("SI chip is required") }
+                    } else null
                 )
 
                 ExposedDropdownMenuBox(
@@ -166,7 +177,11 @@ fun EditUserDialog(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(classDropdownExpanded) },
                         modifier = Modifier
                             .menuAnchor()
-                            .fillMaxWidth()
+                            .fillMaxWidth(),
+                        isError = saveAttempted && !classValid,
+                        supportingText = if (saveAttempted && !classValid) {
+                            { Text("Class is required") }
+                        } else null
                     )
                     ExposedDropdownMenu(
                         expanded = classDropdownExpanded,

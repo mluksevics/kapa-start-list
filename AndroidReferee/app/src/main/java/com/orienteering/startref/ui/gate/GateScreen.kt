@@ -55,7 +55,7 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
         ) {
             // Time field — background color = signal color
             TimeField(
-                timeMs = state.currentTimeMs,
+                timeMs = state.adjustedCurrentTimeMs,
                 signal = state.signal,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -64,7 +64,7 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
 
             // Current-minute runner list
             val minuteLabel = clockFormatter.format(
-                Instant.ofEpochMilli((state.currentTimeMs / 60_000) * 60_000)
+                Instant.ofEpochMilli((state.adjustedCurrentTimeMs / 60_000) * 60_000)
             ).substring(0, 5) // HH:mm
 
             Text(
@@ -191,6 +191,12 @@ private fun RunnerGateRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        Text(
+            text = runner.siCard,
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 12.dp)
+        )
         if (signal == GateSignal.RED) {
             Text(
                 text = "Tap to assign",

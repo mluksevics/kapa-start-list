@@ -68,6 +68,13 @@ class StartListRepository @Inject constructor(
     /** Sets a runner's status to Started (2) and queues a PATCH. */
     suspend fun markStarted(startNumber: Int) = setStatus(startNumber, statusId = 2)
 
+    /** Toggles Started (2) on/off and queues a PATCH. */
+    suspend fun toggleStarted(startNumber: Int) {
+        val runner = runnerDao.getByStartNumber(startNumber) ?: return
+        val newStatusId = if (runner.statusId == 2) 1 else 2
+        setStatus(startNumber, newStatusId)
+    }
+
     /** Toggles DNS (3) on/off and queues a PATCH. */
     suspend fun toggleDns(startNumber: Int) {
         val runner = runnerDao.getByStartNumber(startNumber) ?: return

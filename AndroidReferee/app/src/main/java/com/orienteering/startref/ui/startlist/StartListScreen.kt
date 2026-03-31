@@ -116,8 +116,11 @@ fun StartListScreen(
                     },
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val adjustedTimeMs = currentTimeMs -
+                                (settings.prestartMinutes * 60_000L) -
+                                (settings.lateStartMinutes * 60_000L)
                             Text(
-                                clockFormatter.format(Instant.ofEpochMilli(currentTimeMs)),
+                                clockFormatter.format(Instant.ofEpochMilli(adjustedTimeMs)),
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Spacer(modifier = Modifier.width(10.dp))
@@ -202,7 +205,7 @@ fun StartListScreen(
                                 is StartListItem.Header -> TimeDivider(item.timeMinute, item.isCurrent, settings.rowFontSize.sp)
                                 is StartListItem.Row -> RunnerRow(
                                     runner = item.runner,
-                                    onCheckIn = { viewModel.markStarted(item.runner.startNumber) },
+                                    onCheckIn = { viewModel.toggleStarted(item.runner.startNumber) },
                                     onDns = { viewModel.toggleDns(item.runner.startNumber) },
                                     onEdit = { viewModel.selectRunner(item.runner) },
                                     fontSize = settings.rowFontSize.sp

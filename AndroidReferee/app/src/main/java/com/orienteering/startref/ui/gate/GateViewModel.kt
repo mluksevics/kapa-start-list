@@ -22,6 +22,7 @@ enum class GateSignal { IDLE, BRIGHT_GREEN, GREEN, ORANGE, RED }
 
 data class GateUiState(
     val currentTimeMs: Long = System.currentTimeMillis(),
+    val adjustedCurrentTimeMs: Long = System.currentTimeMillis(),
     val currentMinuteRunners: List<RunnerEntity> = emptyList(),
     val signal: GateSignal = GateSignal.IDLE,
     val lastReadSiCard: String? = null,
@@ -49,7 +50,9 @@ class GateViewModel @Inject constructor(
             while (true) {
                 val now = System.currentTimeMillis()
                 updateCurrentMinuteRunners(now)
-                _uiState.value = _uiState.value.copy(currentTimeMs = now)
+                val s = settings.value
+                val adjustedMs = now - (s.prestartMinutes * 60_000L) - (s.lateStartMinutes * 60_000L)
+                _uiState.value = _uiState.value.copy(currentTimeMs = now, adjustedCurrentTimeMs = adjustedMs)
                 delay(1000 - (now % 1000))
             }
         }
