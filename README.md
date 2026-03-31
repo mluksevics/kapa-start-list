@@ -10,7 +10,7 @@ Real-time start-list management for orienteering events. Three components talk t
 |-----------|------|-------------|
 | [API](API/README.md) | `API/` | .NET 8 minimal API, Azure SQL, source of truth |
 | [Android](AndroidReferee/README.md) | `AndroidReferee/` | Kotlin/Compose app for referees and gate operators |
-| [Desktop](Desktop/StartRef.Desktop/README.md) | `Desktop/StartRef.Desktop/` | WinForms app that syncs OE12/DBISAM ↔ API |
+| [Desktop](Desktop/README.md) | `Desktop/` | WinForms app that syncs OE12/DBISAM ↔ API |
 
 ---
 
@@ -18,44 +18,93 @@ Real-time start-list management for orienteering events. Three components talk t
 
 ```
 OE12 (event software)
-  -> writes local event data
-  -> DBISAM DB
+  -> OE operator creates/edits runners, assigns classes/clubs/start times
+  -> writes into local DBISAM database
 
-Desktop App
-  -> reads/scans DBISAM (Force Push source)
-  -> writes ChipNr/KatNr/StartTime back to DBISAM (via DbBridge.dll)
-  -> PUT /runners (bulk) to .NET API
-  -> GET /runners?changedSince from .NET API (delta pull)
+Desktop App (Windows, event PC)
+  -> reads DBISAM via DbBridge.dll (closed-source Delphi DLL)
+  -> pulls delta updates from API → writes ChipNr / KatNr / StartTime back to DBISAM
+  -> bulk-uploads runners to API on demand (multiple push modes)
+  -> pushes Clubs and Classes lookup tables to API
 
-Android (referee/gate)
-  -> PATCH /runners to .NET API
-  -> GET /runners?changedSince from .NET API (delta pull)
+Android (referee/gate devices, multiple)
+  -> marks runners as Started (gate) or DNS (referee)
+  -> edits runner details (SI chip, class, club, start time)
+  -> PATCHes every change directly to API; failed PATCHes are queued and retried
+  -> pulls delta from API every ~30 s to stay current
 
 .NET API (Azure SQL)
-  <-> central source of truth for mobile + desktop sync
+  <- single source of truth for all devices
+  -> runner data: GET /runners?changedSince (delta) or without for full list
+  -> bulk upsert: PUT /runners (from Desktop)
+  -> single-runner patch: PATCH /runners/{startNumber} (from Android)
+  -> lookups: GET/PUT /api/lookups/classes|clubs
 ```
 
-**Sync flow (Desktop, regular cycle, every ~60 s):**
-1. Pull deltas from API (`GET /runners?changedSince={watermark}`) to receive field updates (each runner may include changelog-backed `changedFields` so only relevant columns are considered for DBISAM writes)
-2. Compare pulled values vs current DBISAM values
-3. Write only changed ChipNr/KatNr/StartTime back to DBISAM via DbBridge DLL
-4. Save server timestamp as watermark for next delta pull
+---
 
-**Force Push All (Desktop, on demand):**
-1. Run regular sync cycle first
-2. Scan all runners from DBISAM (start numbers 1-4000)
-3. Bulk-upload to API (`PUT /runners`)
-4. API updates non-status fields; status never downgrades
+## Data model highlights
 
-**Sync flow (Android, every ~30 s):**
-- Delta poll: `GET /runners?changedSince={watermark}` (optional per-runner `changedFields` drives brief UI highlights on the start list)
-- Status from API is applied as returned (including **Registered** after clearing Started/DNS on another device). **Bulk PUT** from Desktop still uses forward-only status rules so OE12 pushes do not wipe gate state.
+| Entity | Key fields |
+|--------|-----------|
+| `Runner` | `StartNumber` (PK), `Name`, `Surname`, `SiChipNo`, `ClassId`, `ClubId`, `StartTime`, `StatusId`, `LastModifiedUtc`, `LastModifiedBy` |
+| `Class` | `Id` (PK), `Name`, **`StartPlace`** (which physical start location this class uses: 0 = any/unset, 1–3 = specific lanes) |
+| `Club` | `Id` (PK), `Name` |
 
-**Android gate:**
-- USB OTG SportIdent BSM-7/8 station reads SI chips
-- Card matched → runner auto-marked Started + PATCH queued
-- Wrong minute → orange signal + Approve / Handle Manually
-- Not found → red signal + tap runner to assign chip
+`Country` and runner-level `StartPlace` were **removed** in the data-model refactor. Start-place filtering is now done via the class lookup (`class.StartPlace`).
+
+---
+
+## Sync flows
+
+### Desktop → API (push)
+
+Several push modes exist, each suited to different situations:
+
+| Mode | When to use | API `touchAll` | Phantom runners filtered |
+|------|-------------|:-:|:-:|
+| **Force Push All** | After bulk OE12 data entry (full overwrite) | ✓ `true` | ✓ |
+| **Push selected** | After correcting a specific bib range in OE12 | ✓ `true` | ✓ |
+| **Push all changes** | Routine push; API detects what actually changed | — `false` | ✓ |
+| **Upload new** | Add runners OE12 added since last push | — `false` | ✓ |
+
+**`touchAll = true`** tells the API to bump `LastModifiedUtc` on every uploaded runner even if field values are unchanged. This guarantees Android's next incremental poll receives the full updated set — essential after a bulk OE12 import.
+
+**`touchAll = false`** (default) means the API only bumps `LastModifiedUtc` for rows where at least one non-status field actually changed. Android only polls the genuine deltas.
+
+All push modes skip bibs where `idNr == 0` (empty start-number slot in DBISAM) so ghost runners are never created in the API.
+
+### API → Desktop (pull / regular cycle)
+
+```
+1. GET /api/competitions/{date}/runners?changedSince={watermark}
+   Receives delta: runners whose LastModifiedUtc > watermark.
+   Each runner may include changedFields list (API changelog-backed)
+   so only relevant columns are written to DBISAM.
+
+2. For each changed runner (skipping changes made by this desktop device):
+     SiChipNo  → DbChangeChipNrByStartNr
+     ClassId   → DbChangeKatNrByStartNr
+     StartTime → DbChangeStartTimeByStartNr
+     DNS       → DbChangeDnsByStartNr  (stub — pending DLL support)
+   Name, Surname, Club: logged but not written (DLL APIs not yet available).
+
+3. Save response serverTimeUtc as watermark for next pull.
+```
+
+Run automatically every N seconds (**Auto-pull**) or manually via **Pull Now**.
+
+### API → Android (delta poll)
+
+Every ~30 s: `GET /runners?changedSince={watermark}` → merge all fields into Room DB, trust API status fully (status can go up or down — e.g. a DNS can revert to Registered if corrected on another device).
+
+### Android → API (PATCH)
+
+Every user action (start, DNS, edit) is immediately PATCHed to the API. Failed PATCHes are queued locally in `pending_sync` and retried by WorkManager. **Flush pending updates** in Android settings replays the queue immediately.
+
+### Android Force Pull
+
+**Force Pull all** in Android settings: fetches the full runner list from the API (`changedSince = null`), deletes all local runners, then inserts the fresh API response. Resets watermark. Use to recover from a corrupted local state.
 
 ---
 
@@ -64,16 +113,22 @@ Android (referee/gate)
 | Id | Name | Set by |
 |----|------|--------|
 | 1 | Registered | Default |
-| 2 | Started | Android gate (SI chip read) |
+| 2 | Started | Android gate (SI chip read or referee tap) |
 | 3 | DNS | Android referee |
 
-**Rule:** status can only escalate. Started and DNS are never downgraded back to Registered by any component.
+**Status rules by operation:**
+
+- **Desktop bulk PUT (`ResolveStatusForBulkUpload`):** Desktop always sends `StatusId = 1`. The API preserves existing `Started (2)` or `DNS (3)` — OE12 pushes never wipe gate state.
+- **Android PATCH:** Applied directly; server stores the value as received. Any referee can toggle Started or DNS off (back to Registered).
+- **Android / Desktop GET merge:** The received `statusId` is applied as-is (including downgrades) so all devices converge on the latest state set by a referee or gate.
 
 ---
 
 ## Lookup tables
 
-Classes and clubs are stored in separate `Classes` and `Clubs` tables. `Runner` holds only `ClassId`/`ClubId`; names are resolved at read time. The Desktop **Push Clubs** button populates the `Clubs` table from DBISAM. Class names are upserted during bulk upload.
+`Classes` and `Clubs` are stored in dedicated tables and referenced from `Runner` by `ClassId`/`ClubId`. Class names are resolved at read time; the runner record does not store them.
+
+**`Class.StartPlace`** (0 = any/unset, 1–3 = specific start lane) is the authoritative filter used by both the Android start list and the gate screen when a "Start Place" setting is selected. The Desktop **Push Classes** button upserts class names (and `StartPlace = 0` for now) to the API; the Desktop **Push Clubs** button upserts club names.
 
 ---
 
@@ -91,7 +146,7 @@ dotnet run
 ### Desktop
 
 ```bash
-cd Desktop/StartRef.Desktop
+cd Desktop
 dotnet run
 # Enter API URL, API key, and DBISAM path in Settings
 # Place DbBridge.dll alongside the executable
@@ -112,7 +167,7 @@ Open `StartRef.sln` in Visual Studio to work on the API and Desktop projects tog
 ```
 StartRef.sln
 ├── API/StartRef.Api.csproj
-└── Desktop/StartRef.Desktop/StartRef.Desktop.csproj
+└── Desktop/StartRef.Desktop.csproj
 ```
 
 The Android project is a separate Gradle project in `AndroidReferee/`.
