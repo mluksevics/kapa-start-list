@@ -42,9 +42,15 @@ ChangeLogEntry (id identity, competitionDate, startNumber, fieldName, oldValue, 
 
 ---
 
-## Status escalation rules
+## Status rules
 
-Applies on both `PUT` bulk upload and `PATCH` partial update:
+### `PATCH` (Android / referee)
+
+Any valid `statusId` 1–3 is stored as sent (including **Started/DNS → Registered**), subject to `lastModifiedUtc` conflict rules. Referee corrections propagate to the API and other clients on pull.
+
+### `PUT` bulk upload (Desktop / OE12 scan)
+
+Forward-only so a full push (where scans often send Registered) does not clear field-device statuses:
 
 | Incoming | Current | Result |
 |----------|---------|--------|
@@ -62,7 +68,7 @@ For non-status fields: incoming `lastModifiedUtc` is compared to server `LastMod
 - Incoming ≥ server → apply the field
 - Incoming < server → skip the field (`skippedAsOlder` counter)
 
-**Force Push All** (Desktop): sends `lastModifiedUtc = DateTimeOffset.UtcNow`, guaranteeing all fields overwrite server values. Status rules still apply.
+**Force Push All** (Desktop): sends `lastModifiedUtc = DateTimeOffset.UtcNow`, guaranteeing non-status fields overwrite server values. **Bulk status rules** above still apply so runner state from gates/phones is not reset to Registered.
 
 ---
 

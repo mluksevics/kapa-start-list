@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.orienteering.startref.ui.edituser.ChipQuickEditDialog
 import com.orienteering.startref.ui.edituser.EditUserDialog
 import com.orienteering.startref.ui.startlist.components.RunnerRow
 import com.orienteering.startref.ui.startlist.components.TimeDivider
@@ -64,6 +65,7 @@ fun StartListScreen(
     val currentTimeMs by viewModel.currentTimeMs.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val selectedRunner by viewModel.selectedRunner.collectAsStateWithLifecycle()
+    val chipQuickEditRunner by viewModel.chipQuickEditRunner.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val availableClasses by viewModel.availableClasses.collectAsStateWithLifecycle()
@@ -209,6 +211,7 @@ fun StartListScreen(
                                     onCheckIn = { viewModel.toggleStarted(item.runner.startNumber) },
                                     onDns = { viewModel.toggleDns(item.runner.startNumber) },
                                     onEdit = { viewModel.selectRunner(item.runner) },
+                                    onChipClick = { viewModel.openChipQuickEdit(item.runner) },
                                     fontSize = settings.rowFontSize.sp
                                 )
                             }
@@ -231,6 +234,14 @@ fun StartListScreen(
             currentTimeMs = currentTimeMs,
             onDismiss = { viewModel.selectRunner(null) },
             onSave = { updated -> viewModel.updateRunner(updated) }
+        )
+    }
+
+    chipQuickEditRunner?.let { runner ->
+        ChipQuickEditDialog(
+            runner = runner,
+            onDismiss = { viewModel.clearChipQuickEdit() },
+            onSave = { digits -> viewModel.saveQuickChip(digits) }
         )
     }
 }

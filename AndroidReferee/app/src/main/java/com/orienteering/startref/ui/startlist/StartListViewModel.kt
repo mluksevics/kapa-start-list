@@ -57,6 +57,9 @@ class StartListViewModel @Inject constructor(
     private val _selectedRunner = MutableStateFlow<RunnerEntity?>(null)
     val selectedRunner: StateFlow<RunnerEntity?> = _selectedRunner.asStateFlow()
 
+    private val _chipQuickEditRunner = MutableStateFlow<RunnerEntity?>(null)
+    val chipQuickEditRunner: StateFlow<RunnerEntity?> = _chipQuickEditRunner.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -130,11 +133,12 @@ class StartListViewModel @Inject constructor(
                 if (delta.runnerFieldHighlights.isNotEmpty()) {
                     for ((startNr, fields) in delta.runnerFieldHighlights) {
                         val newSet = (_runnerFieldHighlights.value[startNr] ?: emptySet()) + fields
-                        _runnerFieldHighlights.update { it + (startNr to newSet) }
+                        _runnerFieldHighlights.value = _runnerFieldHighlights.value + (startNr to newSet)
                         viewModelScope.launch {
                             delay(8_000)
-                            _runnerFieldHighlights.update { cur ->
-                                if (cur[startNr] == newSet) cur.filterKeys { it != startNr } else cur
+                            val cur = _runnerFieldHighlights.value
+                            if (cur[startNr] == newSet) {
+                                _runnerFieldHighlights.value = cur.filterKeys { key -> key != startNr }
                             }
                         }
                     }
@@ -146,6 +150,22 @@ class StartListViewModel @Inject constructor(
     fun toggleAutoScroll() { _autoScrollEnabled.value = !_autoScrollEnabled.value }
 
     fun selectRunner(runner: RunnerEntity?) { _selectedRunner.value = runner }
+
+    fun openChipQuickEdit(runner: RunnerEntity) {
+        _chipQuickEditRunner.value = runner
+    }
+
+    fun clearChipQuickEdit() {
+        _chipQuickEditRunner.value = null
+    }
+
+    fun saveQuickChip(siCard: String) {
+        val runner = _chipQuickEditRunner.value ?: return
+        viewModelScope.launch {
+            repository.updateSiCardOnly(runner.startNumber, siCard)
+            _chipQuickEditRunner.value = null
+        }
+    }
 
     fun toggleStarted(startNumber: Int) {
         viewModelScope.launch { repository.toggleStarted(startNumber) }

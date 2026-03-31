@@ -279,6 +279,7 @@ public partial class MainForm : Form
             btnSyncNow.Enabled = enabled;
             btnForcePush.Enabled = enabled;
             btnForcePushRange.Enabled = enabled;
+            btnUploadNewRunners.Enabled = enabled;
             btnPushClubs.Enabled = enabled;
         }
     }
@@ -330,6 +331,7 @@ public partial class MainForm : Form
         btnSyncNow.Enabled = false;
         btnForcePush.Enabled = false;
         btnForcePushRange.Enabled = false;
+        btnUploadNewRunners.Enabled = false;
         btnPushClubs.Enabled = false;
         btnPeekWebApi.Enabled = false;
         btnPullPast.Enabled = false;
@@ -347,6 +349,7 @@ public partial class MainForm : Form
         btnSyncNow.Enabled = _pushActionsEnabled;
         btnForcePush.Enabled = _pushActionsEnabled;
         btnForcePushRange.Enabled = _pushActionsEnabled;
+        btnUploadNewRunners.Enabled = _pushActionsEnabled;
         btnPushClubs.Enabled = _pushActionsEnabled;
         btnPeekWebApi.Enabled = true;
         btnPullPast.Enabled = true;
@@ -468,6 +471,29 @@ public partial class MainForm : Form
         catch (OperationCanceledException)
         {
             AppendLog($"{DateTime.Now:HH:mm:ss} Push selected cancelled by user.");
+        }
+        finally
+        {
+            EndCancelableCommand();
+            UpdateStatusLabel("Idle");
+        }
+    }
+
+    private async void btnUploadNewRunners_Click(object sender, EventArgs e)
+    {
+        if (!EnsureDbAvailableForPush("Upload new")) return;
+        if (!TryBeginCancelableCommand("Upload new")) return;
+        var cts = _cancelSyncCts;
+        if (cts is null) return;
+        UpdateStatusLabel("Upload new...");
+        try
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Upload new started.");
+            await Task.Run(() => _syncService.UploadNewRunnersFromIsamAsync(cts.Token), cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Upload new cancelled.");
         }
         finally
         {
@@ -672,6 +698,7 @@ public partial class MainForm : Form
         btnSyncNow.Enabled = false;
         btnForcePush.Enabled = false;
         btnForcePushRange.Enabled = false;
+        btnUploadNewRunners.Enabled = false;
         btnPushClubs.Enabled = false;
         btnPeekWebApi.Enabled = false;
         btnPullPast.Enabled = false;
@@ -691,6 +718,7 @@ public partial class MainForm : Form
         btnSyncNow.Enabled = _pushActionsEnabled;
         btnForcePush.Enabled = _pushActionsEnabled;
         btnForcePushRange.Enabled = _pushActionsEnabled;
+        btnUploadNewRunners.Enabled = _pushActionsEnabled;
         btnPushClubs.Enabled = _pushActionsEnabled;
         btnPeekWebApi.Enabled = true;
         btnPullPast.Enabled = true;

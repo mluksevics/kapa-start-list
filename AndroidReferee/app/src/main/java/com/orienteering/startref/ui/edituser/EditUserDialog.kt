@@ -19,6 +19,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -62,6 +63,10 @@ fun EditUserDialog(
     var siCard by remember { mutableStateOf(runner.siCard) }
     var selectedClassEntry by remember { mutableStateOf(ClassEntry(runner.classId, runner.className)) }
     var classDropdownExpanded by remember { mutableStateOf(false) }
+    val classChangeEnabled = remember(runner.className) { ClassChangePolicy.isClassChangeAllowed(runner.className) }
+    val selectableClasses = remember(runner.className, availableClasses) {
+        ClassChangePolicy.allowedClassTargets(runner.className, availableClasses)
+    }
     var selectedClubEntry by remember { mutableStateOf(ClubEntry(runner.clubId, runner.clubName)) }
     var clubDropdownExpanded by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -80,7 +85,12 @@ fun EditUserDialog(
     }
 
     val siCardValid = siCard.trim().isNotBlank()
-    val classValid = selectedClassEntry.classId != 0 && selectedClassEntry.className.isNotBlank()
+    val classValid =
+        if (classChangeEnabled) {
+            selectedClassEntry.classId != 0 && selectedClassEntry.className.isNotBlank()
+        } else {
+            true
+        }
     val clubValid = selectedClubEntry.clubId != 0 && selectedClubEntry.clubName.isNotBlank()
     // year-2000 threshold — guards against epoch-0 placeholder start times
     val startTimeValid = runner.startTime > 946_684_800_000L
@@ -97,12 +107,14 @@ fun EditUserDialog(
             .withNano(0)
         val newStartTime = newDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
+        val classIdFinal = if (classChangeEnabled) selectedClassEntry.classId else runner.classId
+        val classNameFinal = if (classChangeEnabled) selectedClassEntry.className else runner.className
         return runner.copy(
             name = name.trim(),
             surname = surname.trim(),
             siCard = siCard.trim(),
-            classId = selectedClassEntry.classId,
-            className = selectedClassEntry.className,
+            classId = classIdFinal,
+            className = classNameFinal,
             clubId = selectedClubEntry.clubId,
             clubName = selectedClubEntry.clubName,
             startTime = newStartTime
@@ -165,38 +177,54 @@ fun EditUserDialog(
                     } else null
                 )
 
-                ExposedDropdownMenuBox(
-                    expanded = classDropdownExpanded,
-                    onExpandedChange = { classDropdownExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = selectedClassEntry.className,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Class") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(classDropdownExpanded) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth(),
-                        isError = saveAttempted && !classValid,
-                        supportingText = if (saveAttempted && !classValid) {
-                            { Text("Class is required") }
-                        } else null
-                    )
-                    ExposedDropdownMenu(
+                if (classChangeEnabled) {
+                    ExposedDropdownMenuBox(
                         expanded = classDropdownExpanded,
-                        onDismissRequest = { classDropdownExpanded = false }
+                        onExpandedChange = { classDropdownExpanded = it }
                     ) {
-                        availableClasses.forEach { entry ->
-                            DropdownMenuItem(
-                                text = { Text(entry.className) },
-                                onClick = {
-                                    selectedClassEntry = entry
-                                    classDropdownExpanded = false
-                                }
-                            )
+                        OutlinedTextField(
+                            value = selectedClassEntry.className,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Class") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(classDropdownExpanded) },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth(),
+                            isError = saveAttempted && !classValid,
+                            supportingText = if (saveAttempted && !classValid) {
+                                { Text("Class is required") }
+                            } else null
+                        )
+                        ExposedDropdownMenu(
+                            expanded = classDropdownExpanded,
+                            onDismissRequest = { classDropdownExpanded = false }
+                        ) {
+                            selectableClasses.forEach { entry ->
+                                DropdownMenuItem(
+                                    text = { Text(entry.className) },
+                                    onClick = {
+                                        selectedClassEntry = entry
+                                        classDropdownExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
+                } else {
+                    OutlinedTextField(
+                        value = runner.className,
+                        onValueChange = {},
+                        readOnly = true,
+                        enabled = false,
+                        label = { Text("Class") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
                 }
 
                 ExposedDropdownMenuBox(
@@ -279,36 +307,3 @@ fun EditUserDialog(
         }
     )
 }
-
-/**
- * Returns a group identifier for classes that are allowed to swap within the same group,
- * or null if the class is not in any editable group.
- *
- * Groups:
- *  - "diropen" : starts with DIR or Open
- *  - "youth8"  : starts with M8, W8, M08, W08
- */
-private fun classGroupOf(className: String): String? = when {
-    className.startsWith("DIR", ignoreCase = true) ||
-        className.startsWith("Open", ignoreCase = true) -> "diropen"
-
-    isYouth8Class(className) -> "youth8"
-
-    else -> null
-}
-
-/**
- * Matches M8x / W8x / M08x / W08x youth classes where x is a letter or end of string.
- * Excludes age-group classes like M80, M85, W80, W85 where x is a digit.
- */
-private fun isYouth8Class(className: String): Boolean {
-    val upper = className.uppercase()
-    for (prefix in listOf("M08", "W08", "M8", "W8")) {
-        if (upper.startsWith(prefix)) {
-            val afterPrefix = upper.drop(prefix.length)
-            return afterPrefix.isEmpty() || !afterPrefix[0].isDigit()
-        }
-    }
-    return false
-}
-

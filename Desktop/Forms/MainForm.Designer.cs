@@ -22,7 +22,7 @@ partial class MainForm
     private Label lblIntervalUnit;
     private Label lblLastSyncCaption, lblLastSync;
     private CheckBox chkTestMode;
-    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync;
+    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnUploadNewRunners, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync;
     private Label lblStatus;
     private TextBox txtLog;
     private Label lblLogCaption;
@@ -234,6 +234,15 @@ partial class MainForm
         };
         btnCancelSync.Click += btnCancelSync_Click;
 
+        btnUploadNewRunners = new Button
+        {
+            Text = "Upload new",
+            Location = new System.Drawing.Point(125, y + 34),
+            Size = new System.Drawing.Size(120, 30)
+        };
+        btnUploadNewRunners.Click += btnUploadNewRunners_Click;
+        tipUi.SetToolTip(btnUploadNewRunners, "Upload DBISAM runners missing on API or changed vs Registered/DNS (e.g. after MldKen changes)");
+
         y += 38;
         lblStatus = MakeLabel("Status: Idle", 130, y, 260);
         y += 28;
@@ -260,7 +269,7 @@ partial class MainForm
             chkAutoSync, lblIntervalCaption, nudInterval, lblIntervalUnit,
             lblLastSyncCaption, lblLastSync, chkTestMode,
             sep,
-            btnSyncNow, btnForcePush, btnForcePushRange, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, lblStatus,
+            btnSyncNow, btnForcePush, btnForcePushRange, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, btnUploadNewRunners, lblStatus,
             lblLogCaption, txtLog
         });
     }

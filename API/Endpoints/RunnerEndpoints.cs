@@ -18,21 +18,10 @@ public static class RunnerEndpoints
             if (!DateOnly.TryParse(date, out var competitionDate))
                 return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
 
-            // Auto-create competition if missing so first daily pull can initialize the date.
-            var competition = await db.Competitions.FindAsync(competitionDate);
-            if (competition is null)
-            {
-                db.Competitions.Add(new Competition
-                {
-                    Date = competitionDate,
-                    CreatedAtUtc = DateTimeOffset.UtcNow
-                });
-                await db.SaveChangesAsync();
-            }
+            await EnsureCompetitionExistsAsync(db, competitionDate);
 
             var serverTimeUtc = DateTimeOffset.UtcNow;
 
-            // Load lookup dicts for name resolution
             var classNames = await db.Classes.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name);
             var clubNames  = await db.Clubs.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name);
 
@@ -65,31 +54,18 @@ public static class RunnerEndpoints
                         g => (IReadOnlyList<string>)g.Select(e => e.FieldName).Distinct(StringComparer.Ordinal).ToList());
             }
 
-            var runners = runnerEntities
-                .Select(r => new RunnerResponse(
-                    r.CompetitionDate,
-                    r.StartNumber,
-                    r.SiChipNo,
-                    r.Name,
-                    r.Surname,
-                    r.ClassId,
-                    classNames.GetValueOrDefault(r.ClassId, ""),
-                    r.ClubId,
-                    clubNames.GetValueOrDefault(r.ClubId, ""),
-                    r.Country,
-                    r.StatusId,
-                    r.Status.Name,
-                    r.StartPlace,
-                    r.StartTime?.ToString("HH:mm:ss"),
-                    r.LastModifiedUtc,
-                    r.LastModifiedBy,
-                    changedSince.HasValue && changedFieldsByStart is not null && changedFieldsByStart.TryGetValue(r.StartNumber, out var fields)
-                        ? fields
-                        : null))
-                .ToList();
+            var runners = MapToRunnerResponses(runnerEntities, classNames, clubNames, changedFieldsByStart);
 
             return Results.Ok(new GetRunnersResponse(serverTimeUtc, runners));
         });
+
+        // GET /api/competitions/{date}/runners/registered — status Registered (1) only
+        app.MapGet("/api/competitions/{date}/runners/registered", async (string date, AppDbContext db) =>
+            await GetRunnersForStatusesAsync(date, db, [1]));
+
+        // GET /api/competitions/{date}/runners/dns — status DNS (3) only
+        app.MapGet("/api/competitions/{date}/runners/dns", async (string date, AppDbContext db) =>
+            await GetRunnersForStatusesAsync(date, db, [3]));
 
         // PUT /api/competitions/{date}/runners — bulk upload
         app.MapPut("/api/competitions/{date}/runners", async (
@@ -225,8 +201,8 @@ public static class RunnerEndpoints
                         thisRunnerSkipped = true;
                     }
 
-                    // Status: apply escalation rules regardless of timestamp
-                    int resolvedStatus = ResolveStatus(incoming: dto.StatusId, current: existing.StatusId);
+                    // Status: bulk upload uses forward-only rules so desktop (always sending Registered from OE12 scan) cannot wipe gate/referee statuses
+                    int resolvedStatus = ResolveStatusForBulkUpload(incoming: dto.StatusId, current: existing.StatusId);
                     if (resolvedStatus != existing.StatusId)
                     {
                         changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StatusId", existing.StatusId.ToString(), resolvedStatus.ToString(), utcNow, request.Source));
@@ -333,11 +309,11 @@ public static class RunnerEndpoints
 
             if (request.StatusId.HasValue)
             {
-                int resolvedStatus = ResolveStatus(incoming: request.StatusId.Value, current: runner.StatusId);
-                if (resolvedStatus != runner.StatusId)
+                int v = request.StatusId.Value;
+                if (v is >= 1 and <= 3 && v != runner.StatusId)
                 {
-                    changeLogEntries.Add(MakeLog(competitionDate, startNumber, "StatusId", runner.StatusId.ToString(), resolvedStatus.ToString(), utcNow, request.Source));
-                    runner.StatusId = resolvedStatus;
+                    changeLogEntries.Add(MakeLog(competitionDate, startNumber, "StatusId", runner.StatusId.ToString(), v.ToString(), utcNow, request.Source));
+                    runner.StatusId = v;
                     anyChange = true;
                 }
             }
@@ -429,21 +405,84 @@ public static class RunnerEndpoints
         });
     }
 
-    /// <summary>
-    /// Resolves the new status applying forward-only escalation rules.
-    /// DNS can override Started; neither can be downgraded to Registered.
-    /// </summary>
-    private static int ResolveStatus(int incoming, int current)
+    private static async Task EnsureCompetitionExistsAsync(AppDbContext db, DateOnly competitionDate)
     {
-        // Never downgrade Started(2) or DNS(3) back to Registered(1)
+        var competition = await db.Competitions.FindAsync(competitionDate);
+        if (competition is null)
+        {
+            db.Competitions.Add(new Competition
+            {
+                Date = competitionDate,
+                CreatedAtUtc = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+    }
+
+    private static List<RunnerResponse> MapToRunnerResponses(
+        List<Runner> runnerEntities,
+        IReadOnlyDictionary<int, string> classNames,
+        IReadOnlyDictionary<int, string> clubNames,
+        IReadOnlyDictionary<int, IReadOnlyList<string>>? changedFieldsByStart)
+    {
+        return runnerEntities
+            .Select(r => new RunnerResponse(
+                r.CompetitionDate,
+                r.StartNumber,
+                r.SiChipNo,
+                r.Name,
+                r.Surname,
+                r.ClassId,
+                classNames.GetValueOrDefault(r.ClassId, ""),
+                r.ClubId,
+                clubNames.GetValueOrDefault(r.ClubId, ""),
+                r.Country,
+                r.StatusId,
+                r.Status.Name,
+                r.StartPlace,
+                r.StartTime?.ToString("HH:mm:ss"),
+                r.LastModifiedUtc,
+                r.LastModifiedBy,
+                changedFieldsByStart is not null && changedFieldsByStart.TryGetValue(r.StartNumber, out var fields)
+                    ? fields
+                    : null))
+            .ToList();
+    }
+
+    private static async Task<IResult> GetRunnersForStatusesAsync(string date, AppDbContext db, int[] statusIds)
+    {
+        if (!DateOnly.TryParse(date, out var competitionDate))
+            return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
+
+        await EnsureCompetitionExistsAsync(db, competitionDate);
+
+        var serverTimeUtc = DateTimeOffset.UtcNow;
+        var classNames = await db.Classes.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name);
+        var clubNames  = await db.Clubs.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name);
+
+        var runnerEntities = await db.Runners
+            .AsNoTracking()
+            .Include(r => r.Status)
+            .Where(r => r.CompetitionDate == competitionDate && statusIds.Contains(r.StatusId))
+            .OrderBy(r => r.StartNumber)
+            .ToListAsync();
+
+        var runners = MapToRunnerResponses(runnerEntities, classNames, clubNames, changedFieldsByStart: null);
+        return Results.Ok(new GetRunnersResponse(serverTimeUtc, runners));
+    }
+
+    /// <summary>
+    /// Bulk upload (desktop/OE12): forward-only — never downgrade Started/DNS to Registered so a full push does not erase field device state.
+    /// PATCH from Android applies the requested status directly (including Registered/Cleared).
+    /// </summary>
+    private static int ResolveStatusForBulkUpload(int incoming, int current)
+    {
         if (incoming == 1 && current is 2 or 3)
             return current;
 
-        // DNS(3) can override Started(2) and Registered(1)
         if (incoming == 3)
             return 3;
 
-        // Started(2) overrides Registered(1) only
         if (incoming == 2 && current == 1)
             return 2;
 

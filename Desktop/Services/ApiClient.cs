@@ -30,6 +30,11 @@ public class ApiClient
         if (changedSince.HasValue)
             url += $"?changedSince={Uri.EscapeDataString(changedSince.Value.ToString("O"))}";
 
+        return await GetRunnersRawAsync(url, ct);
+    }
+
+    private async Task<GetRunnersResponse?> GetRunnersRawAsync(string url, CancellationToken ct)
+    {
         try
         {
             var msg = new HttpRequestMessage(HttpMethod.Get, url);

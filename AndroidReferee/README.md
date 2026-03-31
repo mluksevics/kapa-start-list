@@ -23,7 +23,7 @@ All changes are patched to the central StartRef API and synced back from it ever
 | 2        | Started    | Android (gate chip read or referee tap) |
 | 3        | DNS        | Android referee, or Desktop (from OE12) |
 
-Status transitions are **forward-only**: once a runner is Started or DNS they can never revert to Registered via this app.
+Referees can toggle **Started** and **DNS** off (back to **Registered**); changes are PATCHed to the API. Delta sync applies `statusId` from the server so other devices see the same state (including downgrades). **Desktop** may still ignore writing some statuses into OE12/DBISAM locally.
 
 ### Start list source
 
@@ -37,6 +37,14 @@ Status transitions are **forward-only**: once a runner is Started or DNS they ca
 - Optional **`changedFields`** on each runner (changelog-backed): lists which columns changed since the watermark. The app uses this only for **short-lived UI highlights** on the start list (bold / tint on the affected columns). Full row values are still merged as before; `changedFields` is omitted on full fetch or when the server has no audit rows in the window.
 - `className` is **never** updated from the server — it is immutable after initial upload
 - Watermark (`serverTimeUtc`) is stored in DataStore
+
+### Class changes in Edit runner
+
+- Most classes: class dropdown is **disabled** (read-only).
+- **DIR** / **OPEN** (prefix, case-insensitive): may switch only to another class in that same group.
+- **M8** / **W8** / **M08** / **W08** youth classes: may switch only within that group; names where the next character after the prefix is a digit (e.g. **M80**, **W80**, **M85**, **W85**) are excluded from this group.
+
+Tap the **SI chip** column on the start list to open a quick dialog with an empty numeric field for a fast chip update.
 
 ### Pending sync queue
 

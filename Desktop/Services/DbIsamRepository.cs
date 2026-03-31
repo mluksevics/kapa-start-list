@@ -120,10 +120,16 @@ public class DbIsamRepository
         foreach (var r in pulledRunners)
         {
             ct.ThrowIfCancellationRequested();
+            var cfLog = FormatApiChangedFields(r.ChangedFields);
             if (!string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
             {
-                _log($"{Ts()} PULL #{r.StartNumber} (by: {r.LastModifiedBy}) Name='{r.Name}' Surname='{r.Surname}' Class='{r.ClassName}' ({r.ClassId}) Club='{r.ClubName}' ({r.ClubId}) StartTime='{r.StartTime ?? "-"}'");
+                _log($"{Ts()} PULL #{r.StartNumber} (by: {r.LastModifiedBy}) changedFields=[{cfLog}] Name='{r.Name}' Surname='{r.Surname}' Class='{r.ClassName}' ({r.ClassId}) Club='{r.ClubName}' ({r.ClubId}) StartTime='{r.StartTime ?? "-"}'");
             }
+            else
+            {
+                _log($"{Ts()} PULL #{r.StartNumber} ours changedFields=[{cfLog}]");
+            }
+
             if (r.StatusId != 1)
                 _log($"{Ts()} PULL #{r.StartNumber} {r.Name} {r.Surname} – Status={r.StatusName} (by: {r.LastModifiedBy})");
         }
@@ -265,6 +271,15 @@ public class DbIsamRepository
         int dnsCount = pulledRunners.Count(r => r.StatusId == 3);
         if (dnsCount > 0)
             _log($"{Ts()} [WARN] {dnsCount} DNS runner(s) NOT written to DBISAM — DLL lacks DbChangeDnsByStartNr.");
+    }
+
+    private static string FormatApiChangedFields(List<string>? changedFields)
+    {
+        if (changedFields is null)
+            return "not specified";
+        if (changedFields.Count == 0)
+            return "empty";
+        return string.Join(", ", changedFields);
     }
 
     private static bool HintIncludes(RunnerDto r, string fieldName)

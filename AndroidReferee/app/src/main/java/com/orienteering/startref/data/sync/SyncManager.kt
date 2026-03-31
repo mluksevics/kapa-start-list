@@ -195,18 +195,9 @@ class SyncManager @Inject constructor(
         }
     }
 
-    /**
-     * Forward-only status transitions:
-     * - Never downgrade Started(2) or DNS(3) back to Registered(1)
-     * - DNS(3) can override Started(2)
-     * - Started(2) can override Registered(1)
-     */
-    private fun resolveStatus(incoming: Int, current: Int): Int {
-        if (incoming == 1 && current in listOf(2, 3)) return current
-        if (incoming == 3) return 3
-        if (incoming == 2 && current == 1) return 2
-        return current
-    }
+    /** Trust API status on pull so Started/DNS can return to Registered when another device PATCHes. */
+    private fun resolveStatus(incoming: Int, current: Int): Int =
+        if (incoming in 1..3) incoming else current
 
     private fun RunnerDto.toEntity(competitionDate: String) = RunnerEntity(
         startNumber = startNumber,

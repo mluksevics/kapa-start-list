@@ -169,6 +169,103 @@ public class SyncService
             _log($"{Ts()} Force Push: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged}");
     }
 
+    /// <summary>
+    /// Pushes DBISAM rows that are absent from API (Registered/DNS set) or differ from API (e.g. MldKen/field changes), without scanning empty bibs.
+    /// </summary>
+    public async Task UploadNewRunnersFromIsamAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var settings = _getSettings();
+        var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
+
+        _log($"{Ts()} Upload new: loading full start list from API...");
+        var apiResponse = await _api.GetRunnersAsync(date, changedSince: null, ct);
+        if (apiResponse is null)
+        {
+            _log($"{Ts()} Upload new: failed to read API (check URL/key).");
+            return;
+        }
+
+        var apiByStart = apiResponse.Runners.ToDictionary(r => r.StartNumber);
+        _log($"{Ts()} Upload new: API runner count={apiResponse.Runners.Count}.");
+
+        _log($"{Ts()} Upload new: scanning DBISAM 1–4000...");
+        var dbRunners = await Task.Run(() => _dbIsamRepository.ScanRunnersByStartNr(settings, ct), ct);
+        var meaningful = dbRunners.Where(r => HasIsamParticipantData(r)).ToList();
+        _log($"{Ts()} Upload new: DBISAM eligible rows={meaningful.Count}.");
+
+        var now = DateTimeOffset.UtcNow;
+        var toUpload = new List<BulkRunnerDto>();
+        foreach (var db in meaningful)
+        {
+            apiByStart.TryGetValue(db.StartNumber, out var api);
+            bool need = api is null || IsamRowDiffersFromApi(db, api);
+            if (!need) continue;
+
+            db.LastModifiedUtc = now;
+            db.StatusId = api?.StatusId ?? 1;
+            toUpload.Add(db);
+        }
+
+        if (toUpload.Count == 0)
+        {
+            _log($"{Ts()} Upload new: nothing to upload.");
+            return;
+        }
+
+        _log($"{Ts()} Upload new: PUT {toUpload.Count} runner(s)...");
+        var request = new BulkUploadRequest
+        {
+            Source = settings.DeviceName,
+            LastModifiedUtc = now,
+            Runners = toUpload
+        };
+        var pushResult = await _api.BulkUploadAsync(date, request, ct);
+        if (pushResult is null)
+            _log($"{Ts()} Upload new: upload fault — API unreachable.");
+        else
+            _log($"{Ts()} Upload new: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged} skippedAsOlder={pushResult.SkippedAsOlder}");
+    }
+
+    private static bool HasIsamParticipantData(BulkRunnerDto r) =>
+        r.ClassId != 0
+        || r.ClubId != 0
+        || !string.IsNullOrWhiteSpace(r.Surname)
+        || !string.IsNullOrWhiteSpace(r.Name)
+        || !string.IsNullOrWhiteSpace(r.SiChipNo);
+
+    private static bool IsamRowDiffersFromApi(BulkRunnerDto db, RunnerDto api)
+    {
+        if (!StringEqualNorm(db.SiChipNo, api.SiChipNo)) return true;
+        if (!string.Equals(NormTxt(db.Name), NormTxt(api.Name), StringComparison.Ordinal))
+            return true;
+        if (!string.Equals(NormTxt(db.Surname), NormTxt(api.Surname), StringComparison.Ordinal))
+            return true;
+        if (db.ClassId != api.ClassId) return true;
+        if (db.ClubId != api.ClubId) return true;
+        if (!string.Equals(NormTxt(db.ClassName), NormTxt(api.ClassName), StringComparison.Ordinal))
+            return true;
+        if (!string.Equals(NormTxt(db.ClubName), NormTxt(api.ClubName), StringComparison.Ordinal))
+            return true;
+        if (!StringEqualNorm(db.Country, api.Country)) return true;
+        if (db.StartPlace != api.StartPlace) return true;
+        if (!string.Equals(NormStartTime(db.StartTime), NormStartTime(api.StartTime), StringComparison.Ordinal))
+            return true;
+        return false;
+    }
+
+    private static string NormTxt(string? s) => s?.Trim() ?? "";
+
+    private static bool StringEqualNorm(string? a, string? b) =>
+        string.Equals(NormTxt(a), NormTxt(b), StringComparison.Ordinal);
+
+    private static string NormStartTime(string? t)
+    {
+        var s = NormTxt(t);
+        if (s.Length == 0) return "";
+        return TimeOnly.TryParse(s, out var to) ? to.ToString("HH:mm:ss") : s;
+    }
+
     public async Task<UpsertLookupResponse?> PushClubsAsync(CancellationToken ct = default)
     {
         var settings = _getSettings();

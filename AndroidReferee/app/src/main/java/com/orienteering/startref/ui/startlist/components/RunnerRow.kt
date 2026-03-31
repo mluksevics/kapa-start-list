@@ -2,6 +2,7 @@ package com.orienteering.startref.ui.startlist.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -34,6 +35,7 @@ fun RunnerRow(
     onCheckIn: () -> Unit,
     onDns: () -> Unit,
     onEdit: () -> Unit,
+    onChipClick: () -> Unit = {},
     fontSize: TextUnit = 16.sp
 ) {
     val isDns = runner.statusId == 3
@@ -102,7 +104,8 @@ fun RunnerRow(
             fontWeight = if (hl("SiChipNo")) FontWeight.Bold else FontWeight.Normal,
             modifier = Modifier
                 .width(96.dp)
-                .then(if (hl("SiChipNo")) Modifier.background(hlColor) else Modifier),
+                .then(if (hl("SiChipNo")) Modifier.background(hlColor) else Modifier)
+                .clickable(onClick = onChipClick),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

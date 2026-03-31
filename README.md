@@ -49,7 +49,7 @@ Android (referee/gate)
 
 **Sync flow (Android, every ~30 s):**
 - Delta poll: `GET /runners?changedSince={watermark}` (optional per-runner `changedFields` drives brief UI highlights on the start list)
-- Forward-only status merge: Started and DNS are applied, never downgraded
+- Status from API is applied as returned (including **Registered** after clearing Started/DNS on another device). **Bulk PUT** from Desktop still uses forward-only status rules so OE12 pushes do not wipe gate state.
 
 **Android gate:**
 - USB OTG SportIdent BSM-7/8 station reads SI chips

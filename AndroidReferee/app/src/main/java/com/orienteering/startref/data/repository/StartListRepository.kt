@@ -103,6 +103,27 @@ class StartListRepository @Inject constructor(
         )
     }
 
+    /** Updates SI chip only (empty string clears); PATCHes API with siChipNo. */
+    suspend fun updateSiCardOnly(startNumber: Int, siCard: String) {
+        val settings = settingsDataStore.settings.first()
+        val runner = runnerDao.getByStartNumber(startNumber) ?: return
+        val now = System.currentTimeMillis()
+        val updated = runner.copy(
+            siCard = siCard,
+            lastModifiedAt = now,
+            lastModifiedBy = settings.deviceName
+        )
+        runnerDao.update(updated)
+        enqueuePatch(
+            type = PendingSyncEntity.TYPE_EDIT,
+            competitionDate = settings.competitionDate,
+            startNumber = startNumber,
+            payload = buildPatchPayload { put("siChipNo", siCard) },
+            lastModifiedAtMs = now,
+            settings = settings
+        )
+    }
+
     suspend fun updateRunner(runner: RunnerEntity) {
         val settings = settingsDataStore.settings.first()
         val now = System.currentTimeMillis()
