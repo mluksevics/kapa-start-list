@@ -9,8 +9,6 @@ public sealed record PatchRunnerRequest(
     string? Surname,
     int? ClassId,
     int? ClubId,
-    string? Country,
-    int? StartPlace,
     string? StartTime,
     DateTimeOffset LastModifiedUtc,
     string Source

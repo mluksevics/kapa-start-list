@@ -2,7 +2,8 @@ namespace StartRef.Api.Models;
 
 public record LookupItemRequest(
     int Id,
-    string Name);
+    string Name,
+    int StartPlace = 0);
 
 public record UpsertLookupRequest(
     string Source,

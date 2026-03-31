@@ -304,6 +304,10 @@ public class DbBridgeService : IDisposable
     public DbBridgeResult ChangeClubNrByStartNr(int newClubNr, int startNr) =>
         throw new NotSupportedException("DbChangeClubNrByStartNr not yet available in DLL.");
 
+    /// <summary>dnsFlag: 1 = DNS, 0 = not DNS. Stub until DbChangeDnsByStartNr exists in DLL.</summary>
+    public DbBridgeResult ChangeDnsByStartNr(int dayNo, int dnsFlag, int startNr) =>
+        new DbBridgeResult(false, 0, "DbChangeDnsByStartNr not yet in DLL.");
+
     // ── Update Name ───────────────────────────────────────────────────────────
 
     /// <summary>Updates the Name field in the given table (e.g. "Teiln") by IdNr.</summary>

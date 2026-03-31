@@ -59,6 +59,8 @@ public class DbIsamRepository
 
                 var idNrs = DbBridgeService.ParseIdNrList(listRaw);
                 int idNr = idNrs.Count > 0 ? idNrs[0] : 0;
+                if (idNr == 0)
+                    continue;
 
                 var dto = new BulkRunnerDto { StartNumber = startNr, StatusId = 1, LastModifiedUtc = DateTimeOffset.UtcNow };
 
@@ -268,9 +270,31 @@ public class DbIsamRepository
             }
         }
 
-        int dnsCount = pulledRunners.Count(r => r.StatusId == 3);
-        if (dnsCount > 0)
-            _log($"{Ts()} [WARN] {dnsCount} DNS runner(s) NOT written to DBISAM — DLL lacks DbChangeDnsByStartNr.");
+        var foreignForDns = pulledRunners
+            .Where(r => !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (foreignForDns.Count > 0 && !string.IsNullOrEmpty(settings.DbIsamPath))
+        {
+            using var dnsDb = new DbBridgeService(_log);
+            dnsDb.TestMode = settings.IsTestMode;
+            if (dnsDb.Open(settings.DbIsamPath))
+            {
+                foreach (var r in foreignForDns)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (r.StatusId == 3)
+                    {
+                        var res = dnsDb.ChangeDnsByStartNr(settings.DayNo, dnsFlag: 1, r.StartNumber);
+                        _log($"{Ts()} DBISAM DNS #{r.StartNumber}: {(res.Success ? "OK" : res.Message)}");
+                    }
+                    else if (r.StatusId == 1 && HintIncludes(r, "StatusId"))
+                    {
+                        var res = dnsDb.ChangeDnsByStartNr(settings.DayNo, dnsFlag: 0, r.StartNumber);
+                        _log($"{Ts()} DBISAM DNS clear #{r.StartNumber}: {(res.Success ? "OK" : res.Message)}");
+                    }
+                }
+            }
+        }
     }
 
     private static string FormatApiChangedFields(List<string>? changedFields)

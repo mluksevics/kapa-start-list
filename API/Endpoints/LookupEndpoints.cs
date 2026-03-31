@@ -14,7 +14,7 @@ public static class LookupEndpoints
             var items = await db.Classes
                 .AsNoTracking()
                 .OrderBy(x => x.Name)
-                .Select(x => new LookupItemRequest(x.Id, x.Name))
+                .Select(x => new LookupItemRequest(x.Id, x.Name, x.StartPlace))
                 .ToListAsync();
             return Results.Ok(items);
         });
@@ -24,7 +24,7 @@ public static class LookupEndpoints
             var items = await db.Clubs
                 .AsNoTracking()
                 .OrderBy(x => x.Name)
-                .Select(x => new LookupItemRequest(x.Id, x.Name))
+                .Select(x => new LookupItemRequest(x.Id, x.Name, 0))
                 .ToListAsync();
             return Results.Ok(items);
         });
@@ -70,7 +70,7 @@ public static class LookupEndpoints
             var normalized = request.Items
                 .Where(x => x.Id > 0 && !string.IsNullOrWhiteSpace(x.Name))
                 .GroupBy(x => x.Id)
-                .Select(g => new LookupItemRequest(g.Key, g.First().Name.Trim()))
+                .Select(g => new LookupItemRequest(g.Key, g.First().Name.Trim(), g.First().StartPlace))
                 .Where(x => x.Name.Length > 0)
                 .ToList();
 
@@ -87,22 +87,24 @@ public static class LookupEndpoints
             {
                 if (existing.TryGetValue(item.Id, out var current))
                 {
-                    if (current.Name != item.Name)
-                    {
+                    bool nameChanged = current.Name != item.Name;
+                    bool placeChanged = current.StartPlace != item.StartPlace;
+                    if (nameChanged)
                         current.Name = item.Name;
+                    if (placeChanged)
+                        current.StartPlace = item.StartPlace;
+                    if (nameChanged || placeChanged)
                         updated++;
-                    }
                     else
-                    {
                         unchanged++;
-                    }
                 }
                 else
                 {
                     db.Classes.Add(new Class
                     {
                         Id = item.Id,
-                        Name = item.Name
+                        Name = item.Name,
+                        StartPlace = item.StartPlace
                     });
                     inserted++;
                 }
@@ -120,7 +122,7 @@ public static class LookupEndpoints
             var normalized = request.Items
                 .Where(x => x.Id > 0 && !string.IsNullOrWhiteSpace(x.Name))
                 .GroupBy(x => x.Id)
-                .Select(g => new LookupItemRequest(g.Key, g.First().Name.Trim()))
+                .Select(g => new LookupItemRequest(g.Key, g.First().Name.Trim(), 0))
                 .Where(x => x.Name.Length > 0)
                 .ToList();
 

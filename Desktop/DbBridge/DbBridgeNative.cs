@@ -108,4 +108,7 @@ internal static class DbBridgeNative
 
     // [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
     // public static extern int DbChangeClubNrByStartNr(IntPtr ctxHandle, int newClubNr, int startNr);
+
+    // [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    // public static extern int DbChangeDnsByStartNr(IntPtr ctxHandle, int dayNo, int dnsFlag, int startNr);
 }

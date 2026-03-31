@@ -110,13 +110,12 @@ public class SyncService
     }
 
     /// <summary>Runs one sync cycle: PULL from API → write ChipNr changes to DBISAM.</summary>
-    public async Task RunCycleAsync(bool forcePush, CancellationToken ct = default)
+    public async Task RunCycleAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         var settings = _getSettings();
         var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
 
-        // 1. PULL
         _log($"{Ts()} Pulling from API for date {date}...");
         var watermark = settings.GetWatermark(date);
         DateTimeOffset? changedSince = watermark == DateTimeOffset.MinValue ? null : watermark;
@@ -130,15 +129,11 @@ public class SyncService
 
         await Task.Run(() => _dbIsamRepository.ApplyPulledUpdates(settings, pullResult.Runners, ct), ct);
 
-        // 6. Bulk push
-        if (forcePush)
-            await UploadForcePushAsync(settings, date, minStartNumber: 1, maxStartNumber: 4000, ct);
-        else if (pullResult.Runners.Count == 0)
+        if (pullResult.Runners.Count == 0)
             _log($"{Ts()} Sync: no changes from API.");
         else
             _log($"{Ts()} Sync: pulled {pullResult.Runners.Count} runner(s).");
 
-        // Update watermark
         settings.SetWatermark(date, pullResult.ServerTimeUtc);
         settings.Save();
     }
@@ -162,11 +157,44 @@ public class SyncService
             LastModifiedUtc = DateTimeOffset.UtcNow,
             Runners = runners
         };
-        var pushResult = await _api.BulkUploadAsync(date, request, ct);
+        var pushResult = await _api.BulkUploadAsync(date, request, touchAll: true, ct);
         if (pushResult is null)
             _log($"{Ts()} Force Push: upload failed — API unreachable.");
         else
             _log($"{Ts()} Force Push: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged}");
+    }
+
+    /// <summary>Push all eligible rows from DBISAM; API compares and only bumps LastModified when values differ.</summary>
+    public async Task PushAllChangesAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var settings = _getSettings();
+        var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
+        _log($"{Ts()} Push all changes: scanning DBISAM 1–4000...");
+
+        var runners = await Task.Run(() => _dbIsamRepository.ScanRunnersByStartNr(settings, ct), ct);
+        var meaningful = runners.Where(r => HasIsamParticipantData(r)).ToList();
+        if (meaningful.Count == 0)
+        {
+            _log($"{Ts()} Push all changes: no eligible runners.");
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var r in meaningful)
+            r.LastModifiedUtc = now;
+
+        var request = new BulkUploadRequest
+        {
+            Source = settings.DeviceName,
+            LastModifiedUtc = now,
+            Runners = meaningful
+        };
+        var pushResult = await _api.BulkUploadAsync(date, request, touchAll: false, ct);
+        if (pushResult is null)
+            _log($"{Ts()} Push all changes: upload failed — API unreachable.");
+        else
+            _log($"{Ts()} Push all changes: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged} skippedAsOlder={pushResult.SkippedAsOlder}");
     }
 
     /// <summary>
@@ -220,7 +248,7 @@ public class SyncService
             LastModifiedUtc = now,
             Runners = toUpload
         };
-        var pushResult = await _api.BulkUploadAsync(date, request, ct);
+        var pushResult = await _api.BulkUploadAsync(date, request, touchAll: false, ct);
         if (pushResult is null)
             _log($"{Ts()} Upload new: upload fault — API unreachable.");
         else
@@ -247,8 +275,6 @@ public class SyncService
             return true;
         if (!string.Equals(NormTxt(db.ClubName), NormTxt(api.ClubName), StringComparison.Ordinal))
             return true;
-        if (!StringEqualNorm(db.Country, api.Country)) return true;
-        if (db.StartPlace != api.StartPlace) return true;
         if (!string.Equals(NormStartTime(db.StartTime), NormStartTime(api.StartTime), StringComparison.Ordinal))
             return true;
         return false;
@@ -276,7 +302,8 @@ public class SyncService
             .Select(g => new LookupItemDto
             {
                 Id = g.Key,
-                Name = g.First().ClubName.Trim()
+                Name = g.First().ClubName.Trim(),
+                StartPlace = 0
             })
             .Where(x => x.Name.Length > 0)
             .OrderBy(x => x.Id)
@@ -303,6 +330,44 @@ public class SyncService
         return response;
     }
 
+    public async Task<UpsertLookupResponse?> PushClassesAsync(CancellationToken ct = default)
+    {
+        var settings = _getSettings();
+        var runners = await Task.Run(() => _dbIsamRepository.ScanRunnersByStartNr(settings, ct), ct);
+        var classes = runners
+            .Where(r => r.ClassId > 0 && !string.IsNullOrWhiteSpace(r.ClassName))
+            .GroupBy(r => r.ClassId)
+            .Select(g => new LookupItemDto
+            {
+                Id = g.Key,
+                Name = g.First().ClassName.Trim(),
+                StartPlace = 0
+            })
+            .Where(x => x.Name.Length > 0)
+            .OrderBy(x => x.Id)
+            .ToList();
+
+        if (classes.Count == 0)
+        {
+            _log($"{Ts()} Push Classes: nothing to push.");
+            return new UpsertLookupResponse();
+        }
+
+        var response = await _api.UpsertClassesAsync(new UpsertLookupRequest
+        {
+            Source = settings.DeviceName,
+            LastModifiedUtc = DateTimeOffset.UtcNow,
+            Items = classes
+        }, ct);
+
+        if (response is null)
+            _log($"{Ts()} Push Classes: upload failed — API unreachable.");
+        else
+            _log($"{Ts()} Push Classes: inserted={response.Inserted} updated={response.Updated} unchanged={response.Unchanged}");
+
+        return response;
+    }
+
     private static string Ts() => DateTime.Now.ToString("HH:mm:ss");
 
     private static DateOnly ResolveCompetitionDate(AppSettings settings)
@@ -321,7 +386,7 @@ public class SyncService
         AutoSyncStarted?.Invoke();
         try
         {
-            await RunCycleAsync(forcePush: false, _autoSyncCts.Token);
+            await RunCycleAsync(_autoSyncCts.Token);
         }
         catch (OperationCanceledException)
         {

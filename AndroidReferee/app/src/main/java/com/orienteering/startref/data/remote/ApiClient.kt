@@ -22,10 +22,8 @@ data class RunnerDto(
     val className: String,
     val clubId: Int,
     val clubName: String,
-    val country: String?,
     val statusId: Int,
     val statusName: String,
-    val startPlace: Int,
     val startTime: String?,
     val lastModifiedUtc: Long,
     val lastModifiedBy: String,
@@ -39,7 +37,8 @@ data class GetRunnersResult(
 
 data class LookupItemDto(
     val id: Int,
-    val name: String
+    val name: String,
+    val startPlace: Int = 0
 )
 
 class ApiClient(
@@ -60,8 +59,6 @@ class ApiClient(
         surname: String?,
         classId: Int?,
         clubId: Int?,
-        country: String?,
-        startPlace: Int?,
         startTime: String?,
         lastModifiedAtMs: Long,
         source: String,
@@ -134,10 +131,8 @@ class ApiClient(
                         className = r.getString("className"),
                         clubId = r.optInt("clubId", 0),
                         clubName = r.getString("clubName"),
-                        country = r.optString("country").takeIf { it.isNotEmpty() },
                         statusId = r.getInt("statusId"),
                         statusName = r.getString("statusName"),
-                        startPlace = r.getInt("startPlace"),
                         startTime = r.optString("startTime").takeIf { it.isNotEmpty() },
                         lastModifiedUtc = parseIso(r.getString("lastModifiedUtc")),
                         lastModifiedBy = r.getString("lastModifiedBy"),
@@ -171,7 +166,8 @@ class ApiClient(
                     .map { item ->
                         LookupItemDto(
                             id = item.optInt("id", 0),
-                            name = item.optString("name")
+                            name = item.optString("name"),
+                            startPlace = item.optInt("startPlace", 0)
                         )
                     }
                     .filter { it.id > 0 && it.name.isNotBlank() }

@@ -94,46 +94,16 @@ class SyncManager @Inject constructor(
             val result = apiClient.getRunners(settings.competitionDate, null, settings)
                 ?: throw IllegalStateException("No response from API – check API URL and competition date in Settings")
 
-            // Load all existing runners in one query, then split incoming into inserts/updates
-            val existingMap = runnerDao.getAll().associateBy { it.startNumber }
-            val toInsert = mutableListOf<RunnerEntity>()
-            val toUpdate = mutableListOf<RunnerEntity>()
-
-            result.runners.forEach { dto ->
-                val existing = existingMap[dto.startNumber]
-                if (existing == null) {
-                    toInsert.add(dto.toEntity(settings.competitionDate))
-                } else {
-                    val resolvedStatus = resolveStatus(incoming = dto.statusId, current = existing.statusId)
-                    val updated = existing.copy(
-                        siCard = dto.siChipNo ?: existing.siCard,
-                        name = dto.name,
-                        surname = dto.surname,
-                        classId = dto.classId,
-                        className = dto.className,
-                        clubId = dto.clubId,
-                        clubName = dto.clubName,
-                        country = dto.country ?: existing.country,
-                        startPlace = dto.startPlace,
-                        startTime = dto.startTime?.let { hhmmssToEpochMs(it, settings.competitionDate) } ?: existing.startTime,
-                        statusId = resolvedStatus,
-                        checkedInAt = if (resolvedStatus == 2 && existing.statusId != 2) System.currentTimeMillis() else existing.checkedInAt,
-                        lastModifiedAt = dto.lastModifiedUtc,
-                        lastModifiedBy = dto.lastModifiedBy
-                    )
-                    if (updated != existing) toUpdate.add(updated)
-                }
-            }
-
-            if (toInsert.isNotEmpty()) runnerDao.insertAll(toInsert)
-            if (toUpdate.isNotEmpty()) runnerDao.updateAll(toUpdate)
+            runnerDao.deleteAll()
+            val entities = result.runners.map { it.toEntity(settings.competitionDate) }
+            if (entities.isNotEmpty()) runnerDao.insertAll(entities)
 
             val classNamesChanged = syncClassLookups(settings)
             val clubNamesChanged = syncClubLookups(settings)
             settingsDataStore.updateLastServerTimeUtc(result.serverTimeUtc)
             _syncDeltas.tryEmit(
                 SyncDelta(
-                    runnersChanged = toInsert.size + toUpdate.size,
+                    runnersChanged = entities.size,
                     classNamesChanged = classNamesChanged,
                     clubNamesChanged = clubNamesChanged,
                     runnerFieldHighlights = emptyMap()
@@ -171,7 +141,7 @@ class SyncManager @Inject constructor(
             return
         }
 
-        // Status: forward-only transitions only.
+        // Trust API status on pull — allows Started/DNS to be reversed by referee PATCH.
         val resolvedStatus = resolveStatus(incoming = dto.statusId, current = existing.statusId)
         val updated = existing.copy(
             siCard = dto.siChipNo ?: existing.siCard,
@@ -181,8 +151,6 @@ class SyncManager @Inject constructor(
             className = dto.className,
             clubId = dto.clubId,
             clubName = dto.clubName,
-            country = dto.country ?: existing.country,
-            startPlace = dto.startPlace,
             startTime = dto.startTime?.let { hhmmssToEpochMs(it, competitionDate) } ?: existing.startTime,
             statusId = resolvedStatus,
             checkedInAt = if (resolvedStatus == 2 && existing.statusId != 2) System.currentTimeMillis() else existing.checkedInAt,
@@ -209,8 +177,6 @@ class SyncManager @Inject constructor(
         clubId = clubId,
         clubName = clubName,
         startTime = startTime?.let { hhmmssToEpochMs(it, competitionDate) } ?: 0L,
-        country = country ?: "",
-        startPlace = startPlace,
         statusId = statusId,
         lastModifiedAt = lastModifiedUtc,
         lastModifiedBy = lastModifiedBy
@@ -231,7 +197,9 @@ class SyncManager @Inject constructor(
         if (classes.isEmpty()) return 0
         lookupDao.deleteAllClasses()
         lookupDao.insertClasses(
-            classes.map { item -> ClassLookupEntity(id = item.id, name = item.name) }
+            classes.map { item ->
+                ClassLookupEntity(id = item.id, name = item.name, startPlace = item.startPlace)
+            }
         )
         var changed = 0
         classes.forEach { item ->

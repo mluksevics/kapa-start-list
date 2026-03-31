@@ -2,6 +2,7 @@ package com.orienteering.startref.ui.gate
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.orienteering.startref.data.local.LookupDao
 import com.orienteering.startref.data.local.RunnerDao
 import com.orienteering.startref.data.local.entity.RunnerEntity
 import com.orienteering.startref.data.repository.StartListRepository
@@ -110,7 +111,7 @@ class GateViewModel @Inject constructor(
     private suspend fun handleCardRead(siCard: String) {
         val now = System.currentTimeMillis()
         val currentTod = (now / 60_000).toInt() % (24 * 60)
-        val allRunners = runnerDao.getAll().filter { it.startPlace == settings.value.startPlace }
+        val allRunners = filterRunnersByStartPlace(runnerDao.getAll())
 
         // Find runner by SI card
         val matchedRunner = allRunners.firstOrNull { it.siCard == siCard }
@@ -161,8 +162,7 @@ class GateViewModel @Inject constructor(
 
     private suspend fun updateCurrentMinuteRunners(nowMs: Long) {
         val currentTod = (nowMs / 60_000).toInt() % (24 * 60)
-        val selectedStartPlace = settings.value.startPlace
-        val all = runnerDao.getAll().filter { it.startPlace == selectedStartPlace }
+        val all = filterRunnersByStartPlace(runnerDao.getAll())
         val current = all.filter { r ->
             (r.startTime / 60_000).toInt() % (24 * 60) == currentTod
         }.sortedBy { it.startNumber }
@@ -177,5 +177,12 @@ class GateViewModel @Inject constructor(
             pendingApproveRunner = null,
             statusLine = "Waiting for SI card..."
         )
+    }
+
+    private suspend fun filterRunnersByStartPlace(runners: List<RunnerEntity>): List<RunnerEntity> {
+        val sp = settings.value.startPlace
+        if (sp == 0) return runners
+        val map = lookupDao.getAllClasses().associate { it.id to it.startPlace }
+        return runners.filter { map[it.classId] == sp }
     }
 }

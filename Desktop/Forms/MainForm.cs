@@ -280,7 +280,9 @@ public partial class MainForm : Form
             btnForcePush.Enabled = enabled;
             btnForcePushRange.Enabled = enabled;
             btnUploadNewRunners.Enabled = enabled;
+            btnPushAllChanges.Enabled = enabled;
             btnPushClubs.Enabled = enabled;
+            btnPushClasses.Enabled = enabled;
         }
     }
 
@@ -332,7 +334,9 @@ public partial class MainForm : Form
         btnForcePush.Enabled = false;
         btnForcePushRange.Enabled = false;
         btnUploadNewRunners.Enabled = false;
+        btnPushAllChanges.Enabled = false;
         btnPushClubs.Enabled = false;
+        btnPushClasses.Enabled = false;
         btnPeekWebApi.Enabled = false;
         btnPullPast.Enabled = false;
         btnDeleteTodayData.Enabled = false;
@@ -350,7 +354,9 @@ public partial class MainForm : Form
         btnForcePush.Enabled = _pushActionsEnabled;
         btnForcePushRange.Enabled = _pushActionsEnabled;
         btnUploadNewRunners.Enabled = _pushActionsEnabled;
+        btnPushAllChanges.Enabled = _pushActionsEnabled;
         btnPushClubs.Enabled = _pushActionsEnabled;
+        btnPushClasses.Enabled = _pushActionsEnabled;
         btnPeekWebApi.Enabled = true;
         btnPullPast.Enabled = true;
         btnDeleteTodayData.Enabled = true;
@@ -392,7 +398,7 @@ public partial class MainForm : Form
         try
         {
             AppendLog($"{DateTime.Now:HH:mm:ss} Sync Now initiated.");
-            await Task.Run(() => _syncService.RunCycleAsync(forcePush: false, cts.Token), cts.Token);
+            await Task.Run(() => _syncService.RunCycleAsync(cts.Token), cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -423,7 +429,7 @@ public partial class MainForm : Form
         {
             AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All initiated.");
             AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All step 1/2: running sync.");
-            await Task.Run(() => _syncService.RunCycleAsync(forcePush: false, cts.Token), cts.Token);
+            await Task.Run(() => _syncService.RunCycleAsync(cts.Token), cts.Token);
             AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All step 2/2: running force push.");
             await Task.Run(() => _syncService.ForcePushAllAsync(cts.Token), cts.Token);
         }
@@ -464,7 +470,7 @@ public partial class MainForm : Form
         try
         {
             AppendLog($"{DateTime.Now:HH:mm:ss} Push selected ({lo}–{hi}) step 1/2: running sync.");
-            await Task.Run(() => _syncService.RunCycleAsync(forcePush: false, cts.Token), cts.Token);
+            await Task.Run(() => _syncService.RunCycleAsync(cts.Token), cts.Token);
             AppendLog($"{DateTime.Now:HH:mm:ss} Push selected ({lo}–{hi}) step 2/2: uploading range.");
             await Task.Run(() => _syncService.ForcePushSelectedAsync(fromNr, toNr, cts.Token), cts.Token);
         }
@@ -494,6 +500,54 @@ public partial class MainForm : Form
         catch (OperationCanceledException)
         {
             AppendLog($"{DateTime.Now:HH:mm:ss} Upload new cancelled.");
+        }
+        finally
+        {
+            EndCancelableCommand();
+            UpdateStatusLabel("Idle");
+        }
+    }
+
+    private async void btnPushAllChanges_Click(object sender, EventArgs e)
+    {
+        if (!EnsureDbAvailableForPush("Push all changes")) return;
+        if (!TryBeginCancelableCommand("Push all changes")) return;
+        var cts = _cancelSyncCts;
+        if (cts is null) return;
+        UpdateStatusLabel("Push all changes...");
+        try
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push all changes step 1/2: running sync.");
+            await Task.Run(() => _syncService.RunCycleAsync(cts.Token), cts.Token);
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push all changes step 2/2: uploading.");
+            await Task.Run(() => _syncService.PushAllChangesAsync(cts.Token), cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push all changes cancelled by user.");
+        }
+        finally
+        {
+            EndCancelableCommand();
+            UpdateStatusLabel("Idle");
+        }
+    }
+
+    private async void btnPushClasses_Click(object sender, EventArgs e)
+    {
+        if (!EnsureDbAvailableForPush("Push Classes")) return;
+        if (!TryBeginCancelableCommand("Push Classes")) return;
+        var cts = _cancelSyncCts;
+        if (cts is null) return;
+        UpdateStatusLabel("Pushing classes...");
+        try
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push Classes initiated.");
+            await Task.Run(() => _syncService.PushClassesAsync(cts.Token), cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push Classes cancelled by user.");
         }
         finally
         {
@@ -699,7 +753,9 @@ public partial class MainForm : Form
         btnForcePush.Enabled = false;
         btnForcePushRange.Enabled = false;
         btnUploadNewRunners.Enabled = false;
+        btnPushAllChanges.Enabled = false;
         btnPushClubs.Enabled = false;
+        btnPushClasses.Enabled = false;
         btnPeekWebApi.Enabled = false;
         btnPullPast.Enabled = false;
         btnDeleteTodayData.Enabled = false;
@@ -719,7 +775,9 @@ public partial class MainForm : Form
         btnForcePush.Enabled = _pushActionsEnabled;
         btnForcePushRange.Enabled = _pushActionsEnabled;
         btnUploadNewRunners.Enabled = _pushActionsEnabled;
+        btnPushAllChanges.Enabled = _pushActionsEnabled;
         btnPushClubs.Enabled = _pushActionsEnabled;
+        btnPushClasses.Enabled = _pushActionsEnabled;
         btnPeekWebApi.Enabled = true;
         btnPullPast.Enabled = true;
         btnDeleteTodayData.Enabled = true;

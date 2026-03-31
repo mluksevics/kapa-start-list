@@ -9,9 +9,7 @@ public class Runner
     public string Surname { get; set; } = "";
     public int ClassId { get; set; }
     public int ClubId { get; set; }
-    public string? Country { get; set; }
     public int StatusId { get; set; } = 1;
-    public int StartPlace { get; set; }
     public TimeOnly? StartTime { get; set; }
     public DateTimeOffset LastModifiedUtc { get; set; }
     public string LastModifiedBy { get; set; } = "";

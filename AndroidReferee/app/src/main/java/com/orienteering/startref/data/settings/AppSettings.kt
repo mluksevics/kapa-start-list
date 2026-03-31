@@ -1,5 +1,6 @@
 package com.orienteering.startref.data.settings
 
+import java.security.SecureRandom
 import java.time.LocalDate
 
 data class AppSettings(
@@ -19,6 +20,15 @@ data class AppSettings(
 ) {
     companion object {
         const val DEFAULT_FONT_SIZE = 16f
+        const val DEVICE_NAME_PREFIX = "android-"
+
+        fun generateDefaultDeviceName(): String {
+            val bytes = ByteArray(2)
+            SecureRandom().nextBytes(bytes)
+            val suffix = bytes.joinToString("") { "%02x".format(it) }
+            return DEVICE_NAME_PREFIX + suffix
+        }
+
         val DEFAULT = AppSettings(
             apiBaseUrl = "https://startref.azurewebsites.net/",
             apiKey = "marcisTestKey",
@@ -31,7 +41,7 @@ data class AppSettings(
             vibrationEnabled = false,
             rowFontSize = DEFAULT_FONT_SIZE,
             competitionDate = LocalDate.now().toString(),
-            deviceName = "android-referee",
+            deviceName = DEVICE_NAME_PREFIX + "pending",
             lastServerTimeUtc = 0L
         )
     }

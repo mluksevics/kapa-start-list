@@ -57,9 +57,12 @@ public class ApiClient
     public async Task<BulkUploadResponse?> BulkUploadAsync(
         string date,
         BulkUploadRequest request,
+        bool touchAll = false,
         CancellationToken ct = default)
     {
         var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/competitions/{date}/runners";
+        if (touchAll)
+            url += "?touchAll=true";
         var msg = new HttpRequestMessage(HttpMethod.Put, url)
         {
             Content = JsonContent.Create(request)
@@ -71,6 +74,33 @@ public class ApiClient
             var response = await _http.SendAsync(msg, ct);
             if (!response.IsSuccessStatusCode) return null;
             return await response.Content.ReadFromJsonAsync<BulkUploadResponse>(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<UpsertLookupResponse?> UpsertClassesAsync(
+        UpsertLookupRequest request,
+        CancellationToken ct = default)
+    {
+        var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/lookups/classes";
+        var msg = new HttpRequestMessage(HttpMethod.Put, url)
+        {
+            Content = JsonContent.Create(request)
+        };
+        msg.Headers.Add("X-Api-Key", S.ApiKey);
+
+        try
+        {
+            var response = await _http.SendAsync(msg, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            return await response.Content.ReadFromJsonAsync<UpsertLookupResponse>(ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

@@ -52,7 +52,8 @@ class SettingsDataStore @Inject constructor(
             vibrationEnabled = prefs[Keys.VIBRATION_ENABLED] ?: AppSettings.DEFAULT.vibrationEnabled,
             rowFontSize = prefs[Keys.ROW_FONT_SIZE] ?: AppSettings.DEFAULT_FONT_SIZE,
             competitionDate = prefs[Keys.COMPETITION_DATE] ?: LocalDate.now().toString(),
-            deviceName = prefs[Keys.DEVICE_NAME] ?: AppSettings.DEFAULT.deviceName,
+            deviceName = prefs[Keys.DEVICE_NAME]?.takeIf { it.isNotBlank() }
+                ?: AppSettings.DEFAULT.deviceName,
             lastServerTimeUtc = prefs[Keys.LAST_SERVER_TIME_UTC] ?: 0L
         )
     }
@@ -69,5 +70,14 @@ class SettingsDataStore @Inject constructor(
     suspend fun updateRowFontSize(value: Float) = context.dataStore.edit { it[Keys.ROW_FONT_SIZE] = value }
     suspend fun updateCompetitionDate(value: String) = context.dataStore.edit { it[Keys.COMPETITION_DATE] = value }
     suspend fun updateDeviceName(value: String) = context.dataStore.edit { it[Keys.DEVICE_NAME] = value }
+
+    suspend fun ensureDefaultDeviceNameIfMissing() {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.DEVICE_NAME]
+            if (current.isNullOrBlank()) {
+                prefs[Keys.DEVICE_NAME] = AppSettings.generateDefaultDeviceName()
+            }
+        }
+    }
     suspend fun updateLastServerTimeUtc(value: Long) = context.dataStore.edit { it[Keys.LAST_SERVER_TIME_UTC] = value }
 }

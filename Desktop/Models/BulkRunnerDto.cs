@@ -28,14 +28,8 @@ public class BulkRunnerDto
     [JsonPropertyName("clubName")]
     public string ClubName { get; set; } = "";
 
-    [JsonPropertyName("country")]
-    public string? Country { get; set; }
-
     [JsonPropertyName("statusId")]
     public int StatusId { get; set; } = 1;
-
-    [JsonPropertyName("startPlace")]
-    public int StartPlace { get; set; }
 
     [JsonPropertyName("startTime")]
     public string? StartTime { get; set; }

@@ -22,7 +22,7 @@ partial class MainForm
     private Label lblIntervalUnit;
     private Label lblLastSyncCaption, lblLastSync;
     private CheckBox chkTestMode;
-    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnUploadNewRunners, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync;
+    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnUploadNewRunners, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync;
     private Label lblStatus;
     private TextBox txtLog;
     private Label lblLogCaption;
@@ -238,10 +238,27 @@ partial class MainForm
         {
             Text = "Upload new",
             Location = new System.Drawing.Point(125, y + 34),
-            Size = new System.Drawing.Size(120, 30)
+            Size = new System.Drawing.Size(110, 30)
         };
         btnUploadNewRunners.Click += btnUploadNewRunners_Click;
         tipUi.SetToolTip(btnUploadNewRunners, "Upload DBISAM runners missing on API or changed vs Registered/DNS (e.g. after MldKen changes)");
+
+        btnPushAllChanges = new Button
+        {
+            Text = "Push all changes",
+            Location = new System.Drawing.Point(240, y + 34),
+            Size = new System.Drawing.Size(115, 30)
+        };
+        btnPushAllChanges.Click += btnPushAllChanges_Click;
+        tipUi.SetToolTip(btnPushAllChanges, "Sync then push all eligible DBISAM rows; API applies only real diffs");
+
+        btnPushClasses = new Button
+        {
+            Text = "Push Classes",
+            Location = new System.Drawing.Point(360, y + 34),
+            Size = new System.Drawing.Size(100, 30)
+        };
+        btnPushClasses.Click += btnPushClasses_Click;
 
         y += 38;
         lblStatus = MakeLabel("Status: Idle", 130, y, 260);
@@ -269,7 +286,7 @@ partial class MainForm
             chkAutoSync, lblIntervalCaption, nudInterval, lblIntervalUnit,
             lblLastSyncCaption, lblLastSync, chkTestMode,
             sep,
-            btnSyncNow, btnForcePush, btnForcePushRange, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, btnUploadNewRunners, lblStatus,
+            btnSyncNow, btnForcePush, btnForcePushRange, btnPushClubs, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, btnUploadNewRunners, btnPushAllChanges, btnPushClasses, lblStatus,
             lblLogCaption, txtLog
         });
     }

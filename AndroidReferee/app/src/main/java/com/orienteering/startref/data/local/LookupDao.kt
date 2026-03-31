@@ -27,4 +27,7 @@ interface LookupDao {
 
     @Query("DELETE FROM club_lookups")
     suspend fun deleteAllClubs()
+
+    @Query("SELECT * FROM class_lookups")
+    suspend fun getAllClasses(): List<ClassLookupEntity>
 }

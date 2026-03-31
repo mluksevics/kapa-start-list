@@ -14,8 +14,6 @@ data class RunnerEntity(
     val clubId: Int = 0,
     val clubName: String,
     val startTime: Long,
-    val country: String = "",
-    val startPlace: Int = 0,
     val statusId: Int = 1,            // 1=Registered, 2=Started, 3=DNS
     val checkedInAt: Long? = null,    // kept for historical reference; set when status→Started
     val lastModifiedAt: Long = System.currentTimeMillis(),

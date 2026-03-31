@@ -11,7 +11,7 @@ import com.orienteering.startref.data.local.entity.RunnerEntity
 
 @Database(
     entities = [RunnerEntity::class, PendingSyncEntity::class, ClassLookupEntity::class, ClubLookupEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -124,6 +124,46 @@ abstract class AppDatabase : RoomDatabase() {
                         PRIMARY KEY(`id`)
                     )
                     """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `runners_new` (
+                        `startNumber` INTEGER NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `surname` TEXT NOT NULL,
+                        `siCard` TEXT NOT NULL,
+                        `classId` INTEGER NOT NULL,
+                        `className` TEXT NOT NULL,
+                        `clubId` INTEGER NOT NULL,
+                        `clubName` TEXT NOT NULL,
+                        `startTime` INTEGER NOT NULL,
+                        `statusId` INTEGER NOT NULL,
+                        `checkedInAt` INTEGER,
+                        `lastModifiedAt` INTEGER NOT NULL,
+                        `lastModifiedBy` TEXT NOT NULL,
+                        PRIMARY KEY(`startNumber`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `runners_new`
+                        (startNumber, name, surname, siCard, classId, className, clubId, clubName,
+                         startTime, statusId, checkedInAt, lastModifiedAt, lastModifiedBy)
+                    SELECT startNumber, name, surname, siCard, classId, className, clubId, clubName,
+                           startTime, statusId, checkedInAt, lastModifiedAt, lastModifiedBy
+                    FROM runners
+                    """.trimIndent()
+                )
+                db.execSQL("DROP TABLE runners")
+                db.execSQL("ALTER TABLE runners_new RENAME TO runners")
+                db.execSQL(
+                    "ALTER TABLE class_lookups ADD COLUMN startPlace INTEGER NOT NULL DEFAULT 0"
                 )
             }
         }

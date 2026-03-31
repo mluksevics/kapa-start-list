@@ -50,6 +50,10 @@ class SettingsViewModel @Inject constructor(
     fun updateSoundEnabled(value: Boolean) = viewModelScope.launch { settingsDataStore.updateSoundEnabled(value) }
     fun updateVibrationEnabled(value: Boolean) = viewModelScope.launch { settingsDataStore.updateVibrationEnabled(value) }
     fun updateRowFontSize(value: Float) = viewModelScope.launch { settingsDataStore.updateRowFontSize(value) }
+    fun updateDeviceName(value: String) = viewModelScope.launch {
+        val trimmed = value.trim()
+        if (trimmed.isNotEmpty()) settingsDataStore.updateDeviceName(trimmed)
+    }
 
     fun reloadStartList() {
         viewModelScope.launch {

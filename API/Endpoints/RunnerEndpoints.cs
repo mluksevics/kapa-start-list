@@ -67,9 +67,10 @@ public static class RunnerEndpoints
         app.MapGet("/api/competitions/{date}/runners/dns", async (string date, AppDbContext db) =>
             await GetRunnersForStatusesAsync(date, db, [3]));
 
-        // PUT /api/competitions/{date}/runners — bulk upload
+        // PUT /api/competitions/{date}/runners?touchAll=true — bulk upload (touchAll bumps every row)
         app.MapPut("/api/competitions/{date}/runners", async (
             string date,
+            bool touchAll,
             BulkUploadRequest request,
             AppDbContext db) =>
         {
@@ -99,7 +100,7 @@ public static class RunnerEndpoints
             var incomingClasses = request.Runners
                 .Where(r => r.ClassId > 0 && !string.IsNullOrEmpty(r.ClassName))
                 .GroupBy(r => r.ClassId)
-                .Select(g => new Class { Id = g.Key, Name = g.First().ClassName });
+                .Select(g => new Class { Id = g.Key, Name = g.First().ClassName, StartPlace = 0 });
 
             foreach (var cls in incomingClasses)
             {
@@ -141,10 +142,7 @@ public static class RunnerEndpoints
                     bool anyChange = false;
                     bool thisRunnerSkipped = false;
 
-                    // Non-status fields: per-runner timestamp wins over server timestamp.
-                    bool incomingIsNewer = dto.LastModifiedUtc >= existing.LastModifiedUtc;
-
-                    if (incomingIsNewer)
+                    if (touchAll)
                     {
                         if (existing.SiChipNo != dto.SiChipNo)
                         {
@@ -176,53 +174,96 @@ public static class RunnerEndpoints
                             existing.ClubId = dto.ClubId;
                             anyChange = true;
                         }
-                        if (existing.Country != dto.Country)
-                        {
-                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Country", existing.Country, dto.Country, utcNow, request.Source));
-                            existing.Country = dto.Country;
-                            anyChange = true;
-                        }
-                        if (existing.StartPlace != dto.StartPlace)
-                        {
-                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StartPlace", existing.StartPlace.ToString(), dto.StartPlace.ToString(), utcNow, request.Source));
-                            existing.StartPlace = dto.StartPlace;
-                            anyChange = true;
-                        }
                         if (startTime.HasValue && existing.StartTime != startTime)
                         {
                             changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StartTime", existing.StartTime?.ToString("HH:mm:ss"), dto.StartTime, utcNow, request.Source));
                             existing.StartTime = startTime;
                             anyChange = true;
                         }
-                    }
-                    else
-                    {
-                        // Incoming is older — skip non-status fields
-                        thisRunnerSkipped = true;
-                    }
 
-                    // Status: bulk upload uses forward-only rules so desktop (always sending Registered from OE12 scan) cannot wipe gate/referee statuses
-                    int resolvedStatus = ResolveStatusForBulkUpload(incoming: dto.StatusId, current: existing.StatusId);
-                    if (resolvedStatus != existing.StatusId)
-                    {
-                        changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StatusId", existing.StatusId.ToString(), resolvedStatus.ToString(), utcNow, request.Source));
-                        existing.StatusId = resolvedStatus;
-                        anyChange = true;
-                    }
+                        int resolvedTouch = ResolveStatusForBulkUpload(incoming: dto.StatusId, current: existing.StatusId);
+                        if (resolvedTouch != existing.StatusId)
+                        {
+                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StatusId", existing.StatusId.ToString(), resolvedTouch.ToString(), utcNow, request.Source));
+                            existing.StatusId = resolvedTouch;
+                            anyChange = true;
+                        }
 
-                    if (anyChange)
-                    {
                         existing.LastModifiedUtc = utcNow;
                         existing.LastModifiedBy = request.Source;
                         updated++;
                     }
-                    else if (thisRunnerSkipped)
-                    {
-                        skippedAsOlder++;
-                    }
                     else
                     {
-                        unchanged++;
+                        // Non-status fields: per-runner timestamp wins over server timestamp.
+                        bool incomingIsNewer = dto.LastModifiedUtc >= existing.LastModifiedUtc;
+
+                        if (incomingIsNewer)
+                        {
+                            if (existing.SiChipNo != dto.SiChipNo)
+                            {
+                                changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "SiChipNo", existing.SiChipNo, dto.SiChipNo, utcNow, request.Source));
+                                existing.SiChipNo = dto.SiChipNo;
+                                anyChange = true;
+                            }
+                            if (existing.Name != dto.Name)
+                            {
+                                changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Name", existing.Name, dto.Name, utcNow, request.Source));
+                                existing.Name = dto.Name;
+                                anyChange = true;
+                            }
+                            if (existing.Surname != dto.Surname)
+                            {
+                                changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Surname", existing.Surname, dto.Surname, utcNow, request.Source));
+                                existing.Surname = dto.Surname;
+                                anyChange = true;
+                            }
+                            if (existing.ClassId != dto.ClassId)
+                            {
+                                changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClassId", existing.ClassId.ToString(), dto.ClassId.ToString(), utcNow, request.Source));
+                                existing.ClassId = dto.ClassId;
+                                anyChange = true;
+                            }
+                            if (existing.ClubId != dto.ClubId)
+                            {
+                                changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClubId", existing.ClubId.ToString(), dto.ClubId.ToString(), utcNow, request.Source));
+                                existing.ClubId = dto.ClubId;
+                                anyChange = true;
+                            }
+                            if (startTime.HasValue && existing.StartTime != startTime)
+                            {
+                                changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StartTime", existing.StartTime?.ToString("HH:mm:ss"), dto.StartTime, utcNow, request.Source));
+                                existing.StartTime = startTime;
+                                anyChange = true;
+                            }
+                        }
+                        else
+                        {
+                            thisRunnerSkipped = true;
+                        }
+
+                        int resolvedStatus = ResolveStatusForBulkUpload(incoming: dto.StatusId, current: existing.StatusId);
+                        if (resolvedStatus != existing.StatusId)
+                        {
+                            changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StatusId", existing.StatusId.ToString(), resolvedStatus.ToString(), utcNow, request.Source));
+                            existing.StatusId = resolvedStatus;
+                            anyChange = true;
+                        }
+
+                        if (anyChange)
+                        {
+                            existing.LastModifiedUtc = utcNow;
+                            existing.LastModifiedBy = request.Source;
+                            updated++;
+                        }
+                        else if (thisRunnerSkipped)
+                        {
+                            skippedAsOlder++;
+                        }
+                        else
+                        {
+                            unchanged++;
+                        }
                     }
                 }
                 else
@@ -237,9 +278,7 @@ public static class RunnerEndpoints
                         Surname = dto.Surname,
                         ClassId = dto.ClassId,
                         ClubId = dto.ClubId,
-                        Country = dto.Country,
                         StatusId = dto.StatusId,
-                        StartPlace = dto.StartPlace,
                         StartTime = startTime,
                         LastModifiedUtc = utcNow,
                         LastModifiedBy = request.Source
@@ -252,12 +291,8 @@ public static class RunnerEndpoints
                     changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "ClubId", null, dto.ClubId.ToString(), utcNow, request.Source));
                     if (dto.SiChipNo is not null)
                         changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "SiChipNo", null, dto.SiChipNo, utcNow, request.Source));
-                    if (dto.Country is not null)
-                        changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Country", null, dto.Country, utcNow, request.Source));
                     if (dto.StatusId != 1)
                         changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StatusId", "1", dto.StatusId.ToString(), utcNow, request.Source));
-                    if (dto.StartPlace != 0)
-                        changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StartPlace", "0", dto.StartPlace.ToString(), utcNow, request.Source));
                     if (startTime.HasValue)
                         changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "StartTime", null, dto.StartTime, utcNow, request.Source));
 
@@ -353,20 +388,6 @@ public static class RunnerEndpoints
                 anyChange = true;
             }
 
-            if (request.Country is not null && request.Country != runner.Country)
-            {
-                changeLogEntries.Add(MakeLog(competitionDate, startNumber, "Country", runner.Country, request.Country, utcNow, request.Source));
-                runner.Country = request.Country;
-                anyChange = true;
-            }
-
-            if (request.StartPlace.HasValue && request.StartPlace.Value != runner.StartPlace)
-            {
-                changeLogEntries.Add(MakeLog(competitionDate, startNumber, "StartPlace", runner.StartPlace.ToString(), request.StartPlace.Value.ToString(), utcNow, request.Source));
-                runner.StartPlace = request.StartPlace.Value;
-                anyChange = true;
-            }
-
             if (request.StartTime is not null &&
                 TimeOnly.TryParse(request.StartTime, out var newStartTime) &&
                 runner.StartTime != newStartTime)
@@ -436,10 +457,8 @@ public static class RunnerEndpoints
                 classNames.GetValueOrDefault(r.ClassId, ""),
                 r.ClubId,
                 clubNames.GetValueOrDefault(r.ClubId, ""),
-                r.Country,
                 r.StatusId,
                 r.Status.Name,
-                r.StartPlace,
                 r.StartTime?.ToString("HH:mm:ss"),
                 r.LastModifiedUtc,
                 r.LastModifiedBy,

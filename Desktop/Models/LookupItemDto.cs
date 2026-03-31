@@ -9,4 +9,7 @@ public class LookupItemDto
 
     [JsonPropertyName("name")]
     public string Name { get; set; } = "";
+
+    [JsonPropertyName("startPlace")]
+    public int StartPlace { get; set; }
 }

@@ -96,14 +96,16 @@ class StartListViewModel @Inject constructor(
 
     val startListItems: StateFlow<List<StartListItem>> = combine(
         repository.observeRunners(),
+        repository.observeClassStartPlaces(),
         currentTimeMinute,
         settings,
         _runnerFieldHighlights
-    ) { runners, timeMinute, appSettings, highlights ->
+    ) { runners, classStartPlaces, timeMinute, appSettings, highlights ->
         val s = appSettings
         val adjustedMinute = timeMinute - s.lateStartMinutes - s.prestartMinutes
         val tod = ((adjustedMinute.toInt() % (24 * 60)) + (24 * 60)) % (24 * 60)
-        val filtered = if (s.startPlace == 0) runners else runners.filter { it.startPlace == s.startPlace }
+        val filtered = if (s.startPlace == 0) runners
+        else runners.filter { classStartPlaces[it.classId] == s.startPlace }
         buildItems(filtered, tod, highlights)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -199,7 +201,7 @@ class StartListViewModel @Inject constructor(
     fun forcePush() {
         val request = OneTimeWorkRequestBuilder<PendingSyncWorker>().build()
         workManager.enqueueUniqueWork("forcePush", ExistingWorkPolicy.REPLACE, request)
-        _message.value = "Pushing pending updates..."
+        _message.value = "Flushing pending updates..."
     }
 
     fun clearMessage() { _message.value = null }

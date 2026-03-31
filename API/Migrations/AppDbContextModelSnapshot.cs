@@ -45,6 +45,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<int>("Id").HasColumnType("int").ValueGeneratedNever();
             b.Property<string>("Name").IsRequired().HasMaxLength(200).HasColumnType("nvarchar(200)").HasDefaultValue("");
+            b.Property<int>("StartPlace").HasColumnType("int").HasDefaultValue(0);
             b.HasKey("Id");
             b.ToTable("Classes");
         });
@@ -72,12 +73,10 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
             b.Property<int>("StartNumber").HasColumnType("int");
             b.Property<int>("ClassId").HasColumnType("int").HasDefaultValue(0);
             b.Property<int>("ClubId").HasColumnType("int").HasDefaultValue(0);
-            b.Property<string>("Country").HasColumnType("nvarchar(max)");
             b.Property<DateTimeOffset>("LastModifiedUtc").HasColumnType("datetimeoffset");
             b.Property<string>("LastModifiedBy").IsRequired().HasColumnType("nvarchar(max)").HasDefaultValue("");
             b.Property<string>("Name").IsRequired().HasColumnType("nvarchar(max)").HasDefaultValue("");
             b.Property<string>("SiChipNo").HasColumnType("nvarchar(max)");
-            b.Property<int>("StartPlace").HasColumnType("int").HasDefaultValue(0);
             b.Property<TimeOnly?>("StartTime").HasColumnType("time");
             b.Property<int>("StatusId").HasColumnType("int").HasDefaultValue(1);
             b.Property<string>("Surname").IsRequired().HasColumnType("nvarchar(max)").HasDefaultValue("");

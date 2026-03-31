@@ -6,5 +6,6 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "class_lookups")
 data class ClassLookupEntity(
     @PrimaryKey val id: Int,
-    val name: String
+    val name: String,
+    val startPlace: Int = 0
 )

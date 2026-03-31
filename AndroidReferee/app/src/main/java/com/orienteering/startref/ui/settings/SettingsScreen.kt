@@ -66,6 +66,7 @@ fun SettingsScreen(
     var pollIntervalStr by rememberSaveable { mutableStateOf("") }
     var prestartStr by rememberSaveable { mutableStateOf("") }
     var lateStartStr by rememberSaveable { mutableStateOf("") }
+    var deviceName by rememberSaveable { mutableStateOf("") }
     // NOT rememberSaveable — must reset to false on every navigation to this screen
     var fieldsReady by remember { mutableStateOf(false) }
 
@@ -78,6 +79,7 @@ fun SettingsScreen(
             pollIntervalStr = s.pollIntervalSeconds.toString()
             prestartStr = s.prestartMinutes.toString()
             lateStartStr = s.lateStartMinutes.toString()
+            deviceName = s.deviceName
             fieldsReady = true
         }
     }
@@ -181,7 +183,7 @@ fun SettingsScreen(
                     onClick = { viewModel.forcePush() },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Force Push updates")
+                    Text("Flush pending updates")
                 }
             }
 
@@ -211,6 +213,16 @@ fun SettingsScreen(
                     onValueChange = { headerText = it; viewModel.updateHeaderText(it) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
+                )
+            }
+
+            SettingField(label = "Device name (sync / lastModifiedBy)") {
+                OutlinedTextField(
+                    value = deviceName,
+                    onValueChange = { deviceName = it; viewModel.updateDeviceName(it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("android-xxxx") }
                 )
             }
 
