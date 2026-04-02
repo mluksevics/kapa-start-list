@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import android.media.AudioManager
+import android.media.ToneGenerator
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.util.SerialInputOutputManager
 import kotlinx.coroutines.channels.Channel
@@ -50,10 +52,30 @@ class SiStationReader @Inject constructor(
     private var ioManager: SerialInputOutputManager? = null
     private var port: UsbSerialPort? = null
     private val executor = Executors.newSingleThreadExecutor()
-    private val writeExecutor = Executors.newSingleThreadExecutor()
 
     // Accumulation buffer for parsing multi-byte SI protocol frames
     private val buffer = mutableListOf<Byte>()
+
+    private fun playBeep() {
+        try {
+            ToneGenerator(AudioManager.STREAM_NOTIFICATION, ToneGenerator.MAX_VOLUME)
+                .startTone(ToneGenerator.TONE_PROP_BEEP, 600)
+        } catch (e: Exception) {
+            debugLog.log("playBeep failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Sends raw ACK (0x06) so the station advances its state machine and doesn't
+     * retry the autosend frame. Does NOT trigger a beep — that requires the station's
+     * own audio feedback to be enabled via SiPuncher.
+     */
+    private fun sendAck() {
+        val p = port ?: return
+        executor.submit {
+            runCatching { p.write(byteArrayOf(0x06), 500) }
+        }
+    }
 
     companion object {
         const val ACTION_USB_PERMISSION = "com.orienteering.startref.USB_PERMISSION"
@@ -142,17 +164,8 @@ class SiStationReader @Inject constructor(
         _connectionState.value = SiConnectionState.DISCONNECTED
     }
 
-    private fun sendAck() {
-        val p = port ?: return
-        writeExecutor.submit {
-            try {
-                val written = p.write(byteArrayOf(0x06), 500)
-                debugLog.log("ACK sent ($written byte(s))")
-            } catch (e: Exception) {
-                debugLog.log("ACK failed: ${e.javaClass.simpleName}: ${e.message}")
-            }
-        }
-    }
+    // Station is in autosend/master mode — it does not accept framed responses.
+    // Audio feedback is handled by the app via playBeep().
 
     /**
      * Parses SportIdent EPS serial frames to extract SI card numbers.
@@ -172,6 +185,8 @@ class SiStationReader @Inject constructor(
      * SI6/8/9+: card = data[2..5] as full 4-byte big-endian int (value >= 500_000).
      */
     private fun parseData(data: ByteArray) {
+        // Log raw hex so we can spot NAK (0x15) or unexpected responses
+        debugLog.log("RX: ${data.joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }}")
         buffer.addAll(data.toList())
 
         val buf = buffer.toMutableList()
@@ -215,8 +230,7 @@ class SiStationReader @Inject constructor(
             val isCardFrame = cmdInt == 0xD3 ||
                               cmdInt == 0xE5 || cmdInt == 0xE6 ||
                               cmdInt == 0xE8 || cmdInt == 0xE9
-            if (cmdInt == 0xE7) sendAck()  // ACK card-removed so station knows we got it
-
+            if (cmdInt == 0xE7) sendAck()
             if (isCardFrame && len >= 6) {
                 val dataStart = i + 3
                 // DATA[2] is a type/flag byte — card number is always in DATA[3..5]
@@ -236,8 +250,7 @@ class SiStationReader @Inject constructor(
                 }
                 debugLog.log("*** SI chip: $cardNum ***")
                 _cardReadEvents.trySend(cardNum.toString())
-
-                // ACK triggers the station beep
+                playBeep()
                 sendAck()
             }
             i = frameEnd
