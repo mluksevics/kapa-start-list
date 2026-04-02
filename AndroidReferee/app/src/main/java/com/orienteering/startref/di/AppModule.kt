@@ -8,6 +8,7 @@ import com.orienteering.startref.data.local.LookupDao
 import com.orienteering.startref.data.local.PendingSyncDao
 import com.orienteering.startref.data.local.RunnerDao
 import com.orienteering.startref.data.remote.ApiClient
+import com.orienteering.startref.data.si.SiDebugLog
 import com.orienteering.startref.data.si.SiStationReader
 import dagger.Module
 import dagger.Provides
@@ -64,6 +65,10 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideSiStationReader(@ApplicationContext context: Context): SiStationReader =
-        SiStationReader(context)
+    fun provideSiDebugLog(): SiDebugLog = SiDebugLog()
+
+    @Provides
+    @Singleton
+    fun provideSiStationReader(@ApplicationContext context: Context, debugLog: SiDebugLog): SiStationReader =
+        SiStationReader(context, debugLog)
 }

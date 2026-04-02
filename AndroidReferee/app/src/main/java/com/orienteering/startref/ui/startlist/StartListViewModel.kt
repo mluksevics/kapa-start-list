@@ -14,10 +14,13 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.orienteering.startref.data.local.ClassEntry
 import com.orienteering.startref.data.local.ClubEntry
+import com.orienteering.startref.data.local.RunnerDao
 import com.orienteering.startref.data.local.entity.RunnerEntity
 import com.orienteering.startref.data.repository.StartListRepository
 import com.orienteering.startref.data.settings.AppSettings
 import com.orienteering.startref.data.settings.SettingsDataStore
+import com.orienteering.startref.data.si.SiConnectionState
+import com.orienteering.startref.data.si.SiStationReader
 import com.orienteering.startref.data.sync.PendingSyncWorker
 import com.orienteering.startref.data.sync.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -45,9 +48,11 @@ sealed interface StartListItem {
 @HiltViewModel
 class StartListViewModel @Inject constructor(
     private val repository: StartListRepository,
+    private val runnerDao: RunnerDao,
     private val settingsDataStore: SettingsDataStore,
     private val syncManager: SyncManager,
     private val workManager: WorkManager,
+    private val siReader: SiStationReader,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -70,6 +75,13 @@ class StartListViewModel @Inject constructor(
     val autoScrollEnabled: StateFlow<Boolean> = _autoScrollEnabled.asStateFlow()
 
     private val _runnerFieldHighlights = MutableStateFlow<Map<Int, Set<String>>>(emptyMap())
+
+    private val _highlightedStartNumber = MutableStateFlow<Int?>(null)
+    val highlightedStartNumber: StateFlow<Int?> = _highlightedStartNumber.asStateFlow()
+
+    val readerConnected: StateFlow<Boolean> = siReader.connectionState
+        .map { it == SiConnectionState.CONNECTED }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val settings: StateFlow<AppSettings> = settingsDataStore.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings.DEFAULT)
@@ -128,6 +140,18 @@ class StartListViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            siReader.cardReadEvents.collect { cardNumber ->
+                handleSiCardRead(cardNumber)
+            }
+        }
+
+        viewModelScope.launch {
+            settings.collect { s ->
+                siReader.siReaderDeviceKey = s.siReaderDeviceKey
+            }
+        }
+
+        viewModelScope.launch {
             syncManager.syncDeltas.collect { delta ->
                 if (delta.classNamesChanged > 0 || delta.clubNamesChanged > 0) {
                     _message.value = "Changes synced: classes ${delta.classNamesChanged}, clubs ${delta.clubNamesChanged}"
@@ -145,6 +169,24 @@ class StartListViewModel @Inject constructor(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    private fun handleSiCardRead(cardNumber: String) {
+        viewModelScope.launch {
+            val runner = runnerDao.getBySiCard(cardNumber)
+            if (runner == null) {
+                _message.value = "Unknown card: $cardNumber"
+                return@launch
+            }
+            _highlightedStartNumber.value = runner.startNumber
+            if (runner.statusId != 2) {
+                repository.markStarted(runner.startNumber)
+            }
+            delay(3_000)
+            if (_highlightedStartNumber.value == runner.startNumber) {
+                _highlightedStartNumber.value = null
             }
         }
     }

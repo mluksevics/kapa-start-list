@@ -12,15 +12,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -40,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -49,12 +49,12 @@ import com.orienteering.startref.BuildConfig
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val availableSerialDevices by viewModel.availableSerialDevices.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showClearConfirm by remember { mutableStateOf(false) }
     var showFinalClearConfirm by remember { mutableStateOf(false) }
@@ -71,6 +71,7 @@ fun SettingsScreen(
     var fieldsReady by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
+        viewModel.refreshSerialDevices()
         if (!fieldsReady) {
             val s = viewModel.awaitSettings()
             apiBaseUrl = s.apiBaseUrl
@@ -133,11 +134,6 @@ fun SettingsScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
@@ -335,6 +331,13 @@ fun SettingsScreen(
                 }
             }
 
+            SiReaderField(
+                selectedKey = settings.siReaderDeviceKey,
+                devices = availableSerialDevices,
+                onRefresh = { viewModel.refreshSerialDevices() },
+                onSelect = { viewModel.updateSiReaderDeviceKey(it) }
+            )
+
             Button(
                 onClick = { showClearConfirm = true },
                 modifier = Modifier.fillMaxWidth(),
@@ -363,5 +366,62 @@ private fun SettingField(label: String, content: @Composable () -> Unit) {
         )
         Spacer(modifier = Modifier.height(4.dp))
         content()
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SiReaderField(
+    selectedKey: String,
+    devices: List<Pair<String, String>>,
+    onRefresh: () -> Unit,
+    onSelect: (String) -> Unit
+) {
+    val autoLabel = "Auto (first available)"
+    val allOptions = listOf("" to autoLabel) + devices
+    val selectedLabel = allOptions.firstOrNull { it.first == selectedKey }?.second ?: autoLabel
+
+    var expanded by remember { mutableStateOf(false) }
+
+    SettingField(label = "SI Reader port") {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = it },
+                modifier = Modifier.weight(1f)
+            ) {
+                OutlinedTextField(
+                    value = if (devices.isEmpty() && selectedKey.isEmpty()) "(none connected)" else selectedLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth(),
+                    singleLine = true
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    allOptions.forEach { (key, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                onSelect(key)
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+            TextButton(onClick = onRefresh) {
+                Text("Refresh")
+            }
+        }
     }
 }

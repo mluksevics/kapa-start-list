@@ -32,6 +32,7 @@ import com.orienteering.startref.ui.theme.DnsRed
 fun RunnerRow(
     runner: RunnerEntity,
     highlightFields: Set<String> = emptySet(),
+    highlighted: Boolean = false,
     onCheckIn: () -> Unit,
     onDns: () -> Unit,
     onEdit: () -> Unit,
@@ -41,6 +42,7 @@ fun RunnerRow(
     val isDns = runner.statusId == 3
     val isCheckedIn = runner.statusId == 2
     val bg = when {
+        highlighted -> Color(0xFFFFF176)   // Yellow flash for SI card read
         isDns -> DnsRed
         isCheckedIn -> CheckedInGreen
         else -> Color.White

@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -21,10 +23,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,17 +44,15 @@ private val clockFormatter = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(Zo
 fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    DisposableEffect(Unit) {
-        viewModel.onGateActive()
-        onDispose { viewModel.onGateInactive() }
-    }
-
     Scaffold { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // SI Reader connection status strip
+            SiStatusStrip(connected = state.readerConnected)
+
             // Time field — background color = signal color
             TimeField(
                 timeMs = state.adjustedCurrentTimeMs,
@@ -122,6 +122,28 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
                     .padding(12.dp)
             )
         }
+    }
+}
+
+@Composable
+internal fun SiStatusStrip(connected: Boolean) {
+    val dotColor = if (connected) Color(0xFF4CAF50) else Color(0xFFF44336)
+    val label = if (connected) "SI Reader connected" else "SI Reader disconnected"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(dotColor)
+        )
+        Text(text = label, style = MaterialTheme.typography.labelSmall)
     }
 }
 

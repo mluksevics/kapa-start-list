@@ -37,6 +37,7 @@ class SettingsDataStore @Inject constructor(
         val COMPETITION_DATE = stringPreferencesKey("competition_date")
         val DEVICE_NAME = stringPreferencesKey("device_name")
         val LAST_SERVER_TIME_UTC = longPreferencesKey("last_server_time_utc")
+        val SI_READER_DEVICE_KEY = stringPreferencesKey("si_reader_device_key")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -54,7 +55,8 @@ class SettingsDataStore @Inject constructor(
             competitionDate = prefs[Keys.COMPETITION_DATE] ?: LocalDate.now().toString(),
             deviceName = prefs[Keys.DEVICE_NAME]?.takeIf { it.isNotBlank() }
                 ?: AppSettings.DEFAULT.deviceName,
-            lastServerTimeUtc = prefs[Keys.LAST_SERVER_TIME_UTC] ?: 0L
+            lastServerTimeUtc = prefs[Keys.LAST_SERVER_TIME_UTC] ?: 0L,
+            siReaderDeviceKey = prefs[Keys.SI_READER_DEVICE_KEY] ?: ""
         )
     }
 
@@ -80,4 +82,5 @@ class SettingsDataStore @Inject constructor(
         }
     }
     suspend fun updateLastServerTimeUtc(value: Long) = context.dataStore.edit { it[Keys.LAST_SERVER_TIME_UTC] = value }
+    suspend fun updateSiReaderDeviceKey(value: String) = context.dataStore.edit { it[Keys.SI_READER_DEVICE_KEY] = value }
 }

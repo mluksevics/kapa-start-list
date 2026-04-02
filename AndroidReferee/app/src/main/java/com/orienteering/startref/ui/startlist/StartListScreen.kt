@@ -1,6 +1,7 @@
 package com.orienteering.startref.ui.startlist
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,7 +18,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsNotFixed
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,7 +59,6 @@ private val clockFormatter = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(Zo
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StartListScreen(
-    onNavigateToSettings: () -> Unit,
     viewModel: StartListViewModel = hiltViewModel()
 ) {
     val items by viewModel.startListItems.collectAsStateWithLifecycle()
@@ -74,6 +74,9 @@ fun StartListScreen(
     val syncCounts by viewModel.syncCounts.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
+    val highlightedStartNumber by viewModel.highlightedStartNumber.collectAsStateWithLifecycle()
+    val readerConnected by viewModel.readerConnected.collectAsStateWithLifecycle()
+
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -83,6 +86,13 @@ fun StartListScreen(
             snackbarHostState.showSnackbar(it)
             viewModel.clearMessage()
         }
+    }
+
+    // Auto-scroll to SI-highlighted runner
+    LaunchedEffect(highlightedStartNumber) {
+        val startNr = highlightedStartNumber ?: return@LaunchedEffect
+        val idx = items.indexOfFirst { it is StartListItem.Row && it.runner.startNumber == startNr }
+        if (idx >= 0) listState.animateScrollToItem(idx)
     }
 
     // Auto-scroll: fire every time the minute changes
@@ -153,9 +163,6 @@ fun StartListScreen(
                             )
                         }
 
-                        IconButton(onClick = onNavigateToSettings) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
-                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.primary,
@@ -164,6 +171,7 @@ fun StartListScreen(
                         navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 )
+                SiStatusStrip(connected = readerConnected)
                 if (isSyncing) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
@@ -208,6 +216,7 @@ fun StartListScreen(
                                 is StartListItem.Row -> RunnerRow(
                                     runner = item.runner,
                                     highlightFields = item.highlightFields,
+                                    highlighted = item.runner.startNumber == highlightedStartNumber,
                                     onCheckIn = { viewModel.toggleStarted(item.runner.startNumber) },
                                     onDns = { viewModel.toggleDns(item.runner.startNumber) },
                                     onEdit = { viewModel.selectRunner(item.runner) },
@@ -243,5 +252,27 @@ fun StartListScreen(
             onDismiss = { viewModel.clearChipQuickEdit() },
             onSave = { digits -> viewModel.saveQuickChip(digits) }
         )
+    }
+}
+
+@Composable
+private fun SiStatusStrip(connected: Boolean) {
+    val dotColor = if (connected) Color(0xFF4CAF50) else Color(0xFFF44336)
+    val label = if (connected) "SI Reader connected" else "SI Reader disconnected"
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(dotColor)
+        )
+        Text(text = label, style = MaterialTheme.typography.labelSmall)
     }
 }

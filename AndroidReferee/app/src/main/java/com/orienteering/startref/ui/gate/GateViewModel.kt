@@ -8,6 +8,7 @@ import com.orienteering.startref.data.local.entity.RunnerEntity
 import com.orienteering.startref.data.repository.StartListRepository
 import com.orienteering.startref.data.settings.AppSettings
 import com.orienteering.startref.data.settings.SettingsDataStore
+import com.orienteering.startref.data.si.SiConnectionState
 import com.orienteering.startref.data.si.SiStationReader
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -29,12 +30,14 @@ data class GateUiState(
     val lastReadSiCard: String? = null,
     val lastMatchedRunner: RunnerEntity? = null,
     val pendingApproveRunner: RunnerEntity? = null,  // for ORANGE state
-    val statusLine: String = "Waiting for SI card..."
+    val statusLine: String = "Waiting for SI card...",
+    val readerConnected: Boolean = false
 )
 
 @HiltViewModel
 class GateViewModel @Inject constructor(
     private val runnerDao: RunnerDao,
+    private val lookupDao: LookupDao,
     private val repository: StartListRepository,
     settingsDataStore: SettingsDataStore,
     private val siReader: SiStationReader
@@ -64,10 +67,21 @@ class GateViewModel @Inject constructor(
                 handleCardRead(siCard)
             }
         }
-    }
 
-    fun onGateActive() = siReader.start()
-    fun onGateInactive() = siReader.stop()
+        // Connection state
+        viewModelScope.launch {
+            siReader.connectionState.collect { state ->
+                _uiState.value = _uiState.value.copy(readerConnected = state == SiConnectionState.CONNECTED)
+            }
+        }
+
+        // Push device key from settings to reader whenever it changes
+        viewModelScope.launch {
+            settings.collect { s ->
+                siReader.siReaderDeviceKey = s.siReaderDeviceKey
+            }
+        }
+    }
 
     fun approve() {
         val runner = _uiState.value.pendingApproveRunner ?: return

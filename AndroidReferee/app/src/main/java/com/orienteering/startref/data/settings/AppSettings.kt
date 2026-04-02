@@ -16,7 +16,8 @@ data class AppSettings(
     val rowFontSize: Float,
     val competitionDate: String,      // ISO date yyyy-MM-dd, defaults to today
     val deviceName: String,           // identifies this device in lastModifiedBy
-    val lastServerTimeUtc: Long       // watermark for delta sync polling
+    val lastServerTimeUtc: Long,       // watermark for delta sync polling
+    val siReaderDeviceKey: String      // "vendorId:productId" or "" for auto (first found)
 ) {
     companion object {
         const val DEFAULT_FONT_SIZE = 16f
@@ -42,7 +43,8 @@ data class AppSettings(
             rowFontSize = DEFAULT_FONT_SIZE,
             competitionDate = LocalDate.now().toString(),
             deviceName = DEVICE_NAME_PREFIX + "pending",
-            lastServerTimeUtc = 0L
+            lastServerTimeUtc = 0L,
+            siReaderDeviceKey = ""
         )
     }
 }

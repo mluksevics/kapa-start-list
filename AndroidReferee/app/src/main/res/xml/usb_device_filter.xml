@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    SportIdent BSM-7/8 USB device filter.
-    The BSM-7/8 station uses an FTDI FT232R USB-UART chip.
-    Vendor ID 0x0403 (FTDI), Product ID 0x6001 (FT232R).
+    SportIdent USB device filter.
+    Vendor ID 0x10C4 = Silicon Labs (decimal 4292)
+      PID 0xEA60 (decimal 60000) — standard CP2102, common on BSM7/8
+      PID 0x800A (decimal 32778) — found on BS11/BSM8 stations
+    Vendor ID 0x0403 = FTDI (decimal 1027)
+      PID 0x6001 (decimal 24577) — FT232R
 -->
 <resources>
-    <usb-device vendor-id="1027" product-id="24577" />
+    <usb-device vendor-id="4292" product-id="60000" />
+    <usb-device vendor-id="4292" product-id="32778" />
+    <usb-device vendor-id="1027"  product-id="24577" />
 </resources>

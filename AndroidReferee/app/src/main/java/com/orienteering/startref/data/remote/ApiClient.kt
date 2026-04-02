@@ -76,8 +76,6 @@ class ApiClient(
                 surname?.let { put("surname", it) }
                 classId?.let { put("classId", it) }
                 clubId?.let { put("clubId", it) }
-                country?.let { put("country", it) }
-                startPlace?.let { put("startPlace", it) }
                 startTime?.let { put("startTime", it) }
                 put("lastModifiedUtc", toIso(lastModifiedAtMs))
                 put("source", source)
