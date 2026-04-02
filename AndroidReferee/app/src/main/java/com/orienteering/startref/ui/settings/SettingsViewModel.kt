@@ -94,6 +94,10 @@ class SettingsViewModel @Inject constructor(
         settingsDataStore.updateSiReaderDeviceKey(key)
     }
 
+    fun updateLoudSound(value: Boolean) = viewModelScope.launch {
+        settingsDataStore.updateLoudSound(value)
+    }
+
     fun reloadStartList() {
         viewModelScope.launch {
             _isLoading.value = true

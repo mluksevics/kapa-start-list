@@ -75,10 +75,11 @@ class GateViewModel @Inject constructor(
             }
         }
 
-        // Push device key from settings to reader whenever it changes
+        // Push device key and loud-sound flag from settings to reader whenever they change
         viewModelScope.launch {
             settings.collect { s ->
                 siReader.siReaderDeviceKey = s.siReaderDeviceKey
+                siReader.loudSound = s.loudSound
             }
         }
     }

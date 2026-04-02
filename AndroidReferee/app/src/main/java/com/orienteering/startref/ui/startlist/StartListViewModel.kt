@@ -148,6 +148,7 @@ class StartListViewModel @Inject constructor(
         viewModelScope.launch {
             settings.collect { s ->
                 siReader.siReaderDeviceKey = s.siReaderDeviceKey
+                siReader.loudSound = s.loudSound
             }
         }
 

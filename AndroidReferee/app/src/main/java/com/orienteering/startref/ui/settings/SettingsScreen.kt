@@ -314,6 +314,13 @@ fun SettingsScreen(
                 )
             }
 
+            SettingField(label = "Loud sound (ignores device volume)") {
+                Switch(
+                    checked = settings.loudSound,
+                    onCheckedChange = { viewModel.updateLoudSound(it) }
+                )
+            }
+
             SettingField(label = "Row font size: ${settings.rowFontSize.toInt()} sp") {
                 Row(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,

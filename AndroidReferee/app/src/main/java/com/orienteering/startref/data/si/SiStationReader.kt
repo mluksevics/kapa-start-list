@@ -49,6 +49,9 @@ class SiStationReader @Inject constructor(
     /** Set externally (from settings) before calling start(). "" = auto. */
     var siReaderDeviceKey: String = ""
 
+    /** When true uses STREAM_ALARM (bypasses device volume). Updated live from settings. */
+    var loudSound: Boolean = false
+
     private var ioManager: SerialInputOutputManager? = null
     private var port: UsbSerialPort? = null
     private val executor = Executors.newSingleThreadExecutor()
@@ -56,20 +59,23 @@ class SiStationReader @Inject constructor(
     // Accumulation buffer for parsing multi-byte SI protocol frames
     private val buffer = mutableListOf<Byte>()
 
-    /** Positive confirmation — ascending two-tone "ta-daa". Volume follows device media volume. */
+    private val audioStream get() =
+        if (loudSound) AudioManager.STREAM_ALARM else AudioManager.STREAM_MUSIC
+
+    /** Positive confirmation — ascending two-tone "ta-daa". */
     fun playSuccess() {
         try {
-            ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME)
+            ToneGenerator(audioStream, ToneGenerator.MAX_VOLUME)
                 .startTone(ToneGenerator.TONE_PROP_ACK, 600)
         } catch (e: Exception) {
             debugLog.log("playSuccess failed: ${e.message}")
         }
     }
 
-    /** Error / warning — continuous high-pitched beep. Volume follows device media volume. */
+    /** Error / warning — continuous high-pitched beep. */
     fun playError() {
         try {
-            ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME)
+            ToneGenerator(audioStream, ToneGenerator.MAX_VOLUME)
                 .startTone(ToneGenerator.TONE_CDMA_HIGH_L, 800)
         } catch (e: Exception) {
             debugLog.log("playError failed: ${e.message}")
