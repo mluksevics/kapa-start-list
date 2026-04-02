@@ -9,12 +9,12 @@ import android.media.AudioManager
 import android.media.ToneGenerator
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.util.SerialInputOutputManager
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.receiveAsFlow
 import java.util.concurrent.Executors
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -40,8 +40,9 @@ class SiStationReader @Inject constructor(
     private val context: Context,
     private val debugLog: SiDebugLog
 ) {
-    private val _cardReadEvents = Channel<String>(Channel.BUFFERED)
-    val cardReadEvents: Flow<String> = _cardReadEvents.receiveAsFlow()
+    // SharedFlow so multiple collectors (GateViewModel, StartListViewModel) all receive every event
+    private val _cardReadEvents = MutableSharedFlow<String>(extraBufferCapacity = 16)
+    val cardReadEvents: Flow<String> = _cardReadEvents.asSharedFlow()
 
     private val _connectionState = MutableStateFlow(SiConnectionState.DISCONNECTED)
     val connectionState: StateFlow<SiConnectionState> = _connectionState.asStateFlow()
@@ -59,22 +60,36 @@ class SiStationReader @Inject constructor(
     // Accumulation buffer for parsing multi-byte SI protocol frames
     private val buffer = mutableListOf<Byte>()
 
-    /** Positive confirmation — ascending two-tone "ta-daa". */
-    fun playSuccess() = playTone(ToneGenerator.TONE_PROP_ACK, 600)
+    /**
+     * Success sound on card read.
+     * Normal: ascending two-tone (TONE_PROP_ACK), volume follows device media volume.
+     * Loud: continuous high-frequency scanner beep (TONE_CDMA_HIGH_L) on STREAM_ALARM at max volume.
+     */
+    fun playSuccess() {
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            if (loudSound) {
+                audioManager.setStreamVolume(AudioManager.STREAM_ALARM, audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0)
+                ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
+                    .startTone(ToneGenerator.TONE_CDMA_ABBR_ALERT, 800)
+            } else {
+                ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME)
+                    .startTone(ToneGenerator.TONE_PROP_ACK, 600)
+            }
+        } catch (e: Exception) {
+            debugLog.log("playSuccess failed: ${e.message}")
+        }
+    }
 
     /** Error / warning — continuous high-pitched beep. */
-    fun playError() = playTone(ToneGenerator.TONE_CDMA_HIGH_L, 800)
-
-    private fun playTone(tone: Int, durationMs: Int) {
+    fun playError() {
         try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             val stream = if (loudSound) AudioManager.STREAM_ALARM else AudioManager.STREAM_MUSIC
-            if (loudSound) {
-                audioManager.setStreamVolume(stream, audioManager.getStreamMaxVolume(stream), 0)
-            }
-            ToneGenerator(stream, ToneGenerator.MAX_VOLUME).startTone(tone, durationMs)
+            if (loudSound) audioManager.setStreamVolume(stream, audioManager.getStreamMaxVolume(stream), 0)
+            ToneGenerator(stream, ToneGenerator.MAX_VOLUME).startTone(ToneGenerator.TONE_CDMA_HIGH_L, 800)
         } catch (e: Exception) {
-            debugLog.log("playTone failed: ${e.message}")
+            debugLog.log("playError failed: ${e.message}")
         }
     }
 
@@ -262,7 +277,7 @@ class SiStationReader @Inject constructor(
                     threeByte
                 }
                 debugLog.log("*** SI chip: $cardNum ***")
-                _cardReadEvents.trySend(cardNum.toString())
+                _cardReadEvents.tryEmit(cardNum.toString())
                 playSuccess()
                 sendAck()
             }

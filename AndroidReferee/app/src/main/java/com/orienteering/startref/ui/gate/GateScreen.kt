@@ -28,7 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextGeometricTransform
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -77,8 +79,9 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
                 items(state.currentMinuteRunners) { runner ->
                     RunnerGateRow(
                         runner = runner,
-                        signal = state.signal,
-                        isMatched = runner.startNumber == state.lastMatchedRunner?.startNumber,
+                        isStarted = runner.statusId == 2,
+                        isJustMatched = runner.startNumber == state.lastMatchedRunner?.startNumber && state.signal == GateSignal.BRIGHT_GREEN,
+                        clickable = state.rowsClickable,
                         onClick = { viewModel.assignChipToRunner(runner) }
                     )
                 }
@@ -86,8 +89,8 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
 
             HorizontalDivider()
 
-            // Action buttons — visible only on ORANGE or RED
-            if (state.signal == GateSignal.ORANGE || state.signal == GateSignal.RED) {
+            // Action buttons — visible on ORANGE or RED (includes manual-hold RED)
+            if (state.rowsClickable) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -179,51 +182,36 @@ private fun TimeField(timeMs: Long, signal: GateSignal, modifier: Modifier = Mod
 @Composable
 private fun RunnerGateRow(
     runner: RunnerEntity,
-    signal: GateSignal,
-    isMatched: Boolean,
+    isStarted: Boolean,       // statusId==2 from DB — persists across clock ticks
+    isJustMatched: Boolean,   // bright flash for the current scan
+    clickable: Boolean,
     onClick: () -> Unit
 ) {
     val bgColor = when {
-        isMatched && signal == GateSignal.GREEN -> Color(0xFFE8F5E9)
-        isMatched && signal == GateSignal.BRIGHT_GREEN -> Color(0xFFA5D6A7)
-        else -> Color.Transparent
+        isJustMatched -> Color(0xFF00E676)   // bright green flash
+        isStarted     -> Color(0xFF4CAF50)   // steady green — runner has started
+        else          -> Color.Transparent
     }
+    val normalStyle = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold)
+    val narrowStyle = normalStyle.copy(textGeometricTransform = TextGeometricTransform(scaleX = 0.7f))
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(bgColor)
-            .clickable(enabled = signal == GateSignal.RED, onClick = onClick)
+            .clickable(enabled = clickable, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "${runner.startNumber}",
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(end = 12.dp),
-            style = MaterialTheme.typography.bodyLarge
-        )
-        Column(modifier = Modifier.weight(1f)) {
+        Text(text = "${runner.startNumber}", style = normalStyle, modifier = Modifier.padding(end = 8.dp))
+        Text(text = "${runner.name} ${runner.surname}", style = narrowStyle, modifier = Modifier.weight(1f))
+        Text(text = runner.className, style = normalStyle, modifier = Modifier.padding(horizontal = 8.dp))
+        Text(text = runner.siCard, style = normalStyle, modifier = Modifier.padding(start = 8.dp))
+        if (clickable) {
             Text(
-                text = "${runner.name} ${runner.surname}",
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Text(
-                text = runner.className,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Text(
-            text = runner.siCard,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 12.dp)
-        )
-        if (signal == GateSignal.RED) {
-            Text(
-                text = "Tap to assign",
+                text = "↑assign",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 8.dp)
             )
         }
     }

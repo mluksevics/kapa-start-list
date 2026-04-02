@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -29,10 +30,13 @@ data class GateUiState(
     val signal: GateSignal = GateSignal.IDLE,
     val lastReadSiCard: String? = null,
     val lastMatchedRunner: RunnerEntity? = null,
-    val pendingApproveRunner: RunnerEntity? = null,  // for ORANGE state
+    val pendingApproveRunner: RunnerEntity? = null,  // for ORANGE state — runner in wrong minute
     val statusLine: String = "Waiting for SI card...",
     val readerConnected: Boolean = false
-)
+) {
+    /** True when the current-minute runner rows should be tappable for chip assignment. */
+    val rowsClickable get() = signal == GateSignal.RED || signal == GateSignal.ORANGE
+}
 
 @HiltViewModel
 class GateViewModel @Inject constructor(
@@ -56,7 +60,7 @@ class GateViewModel @Inject constructor(
                 updateCurrentMinuteRunners(now)
                 val s = settings.value
                 val adjustedMs = now - (s.prestartMinutes * 60_000L)
-                _uiState.value = _uiState.value.copy(currentTimeMs = now, adjustedCurrentTimeMs = adjustedMs)
+                _uiState.update { it.copy(currentTimeMs = now, adjustedCurrentTimeMs = adjustedMs) }
                 delay(1000 - (now % 1000))
             }
         }
@@ -71,7 +75,7 @@ class GateViewModel @Inject constructor(
         // Connection state
         viewModelScope.launch {
             siReader.connectionState.collect { state ->
-                _uiState.value = _uiState.value.copy(readerConnected = state == SiConnectionState.CONNECTED)
+                _uiState.update { it.copy(readerConnected = state == SiConnectionState.CONNECTED) }
             }
         }
 
@@ -88,36 +92,38 @@ class GateViewModel @Inject constructor(
         val runner = _uiState.value.pendingApproveRunner ?: return
         viewModelScope.launch {
             repository.markStarted(runner.startNumber)
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 signal = GateSignal.GREEN,
                 pendingApproveRunner = null,
                 statusLine = "Approved: #${runner.startNumber} ${runner.name} ${runner.surname}"
-            )
+            ) }
             delay(2000)
             resetSignal()
         }
     }
 
+    /** Keep chip remembered and rows clickable so referee can tap to assign. */
     fun handleManually() {
         val siCard = _uiState.value.lastReadSiCard ?: return
-        _uiState.value = _uiState.value.copy(
-            signal = GateSignal.IDLE,
+        _uiState.update { it.copy(
+            signal = GateSignal.RED,
             pendingApproveRunner = null,
-            statusLine = "Handle manually: SI $siCard"
-        )
+            statusLine = "Manual — tap runner to assign SI $siCard"
+        ) }
     }
 
-    /** Called when user taps a runner row in RED state (assigns chip to that runner). */
+    /** Called when user taps a runner row (RED or ORANGE state). Assigns chip and marks started. */
     fun assignChipToRunner(runner: RunnerEntity) {
         val siCard = _uiState.value.lastReadSiCard ?: return
         viewModelScope.launch {
             repository.updateRunner(runner.copy(siCard = siCard))
             repository.markStarted(runner.startNumber)
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 signal = GateSignal.GREEN,
+                lastMatchedRunner = runner,
                 pendingApproveRunner = null,
                 statusLine = "Assigned SI $siCard → #${runner.startNumber} ${runner.name} ${runner.surname}"
-            )
+            ) }
             delay(2000)
             resetSignal()
         }
@@ -134,11 +140,12 @@ class GateViewModel @Inject constructor(
 
         if (matchedRunner == null) {
             // RED — chip not found
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 signal = GateSignal.RED,
                 lastReadSiCard = siCard,
+                pendingApproveRunner = null,
                 statusLine = "Not found: SI $siCard"
-            )
+            ) }
             return
         }
 
@@ -148,31 +155,33 @@ class GateViewModel @Inject constructor(
         if (diffMinutes == 0) {
             // BRIGHT_GREEN — exact minute match
             repository.markStarted(matchedRunner.startNumber)
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 signal = GateSignal.BRIGHT_GREEN,
                 lastReadSiCard = siCard,
                 lastMatchedRunner = matchedRunner,
+                pendingApproveRunner = null,
                 statusLine = "SI $siCard → #${matchedRunner.startNumber} ${matchedRunner.name} OK"
-            )
+            ) }
             delay(2000)
-            _uiState.value = _uiState.value.copy(signal = GateSignal.GREEN)
+            _uiState.update { it.copy(signal = GateSignal.GREEN) }
             delay(3000)
             resetSignal()
         } else if (diffMinutes in -5..5) {
-            // ORANGE — within ±5 min but not current minute
-            _uiState.value = _uiState.value.copy(
+            // ORANGE — within ±5 min; show details so referee can approve or reassign
+            _uiState.update { it.copy(
                 signal = GateSignal.ORANGE,
                 lastReadSiCard = siCard,
                 pendingApproveRunner = matchedRunner,
-                statusLine = "Wrong minute: SI $siCard → #${matchedRunner.startNumber} (${if (diffMinutes > 0) "+$diffMinutes" else "$diffMinutes"} min)"
-            )
+                statusLine = "Wrong minute: SI $siCard → #${matchedRunner.startNumber} ${matchedRunner.name} ${matchedRunner.surname} [${matchedRunner.className}] (${if (diffMinutes > 0) "+$diffMinutes" else "$diffMinutes"} min)"
+            ) }
         } else {
             // RED — found but too far from start time
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 signal = GateSignal.RED,
                 lastReadSiCard = siCard,
-                statusLine = "Wrong time: SI $siCard → #${matchedRunner.startNumber} ($diffMinutes min off)"
-            )
+                pendingApproveRunner = null,
+                statusLine = "Wrong time: SI $siCard → #${matchedRunner.startNumber} ${matchedRunner.name} ${matchedRunner.surname} ($diffMinutes min off)"
+            ) }
         }
     }
 
@@ -183,17 +192,17 @@ class GateViewModel @Inject constructor(
         val current = all.filter { r ->
             (r.startTime / 60_000).toInt() % (24 * 60) == currentTod
         }.sortedBy { it.startNumber }
-        _uiState.value = _uiState.value.copy(currentMinuteRunners = current)
+        _uiState.update { it.copy(currentMinuteRunners = current) }
     }
 
     private fun resetSignal() {
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             signal = GateSignal.IDLE,
             lastReadSiCard = null,
             lastMatchedRunner = null,
             pendingApproveRunner = null,
             statusLine = "Waiting for SI card..."
-        )
+        ) }
     }
 
     private suspend fun filterRunnersByStartPlace(runners: List<RunnerEntity>): List<RunnerEntity> {
