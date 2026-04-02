@@ -125,7 +125,8 @@ class GateViewModel @Inject constructor(
 
     private suspend fun handleCardRead(siCard: String) {
         val now = System.currentTimeMillis()
-        val currentTod = (now / 60_000).toInt() % (24 * 60)
+        val adjustedNow = now - (settings.value.prestartMinutes * 60_000L)
+        val currentTod = (adjustedNow / 60_000).toInt() % (24 * 60)
         val allRunners = filterRunnersByStartPlace(runnerDao.getAll())
 
         // Find runner by SI card
@@ -176,7 +177,8 @@ class GateViewModel @Inject constructor(
     }
 
     private suspend fun updateCurrentMinuteRunners(nowMs: Long) {
-        val currentTod = (nowMs / 60_000).toInt() % (24 * 60)
+        val adjustedMs = nowMs - (settings.value.prestartMinutes * 60_000L)
+        val currentTod = (adjustedMs / 60_000).toInt() % (24 * 60)
         val all = filterRunnersByStartPlace(runnerDao.getAll())
         val current = all.filter { r ->
             (r.startTime / 60_000).toInt() % (24 * 60) == currentTod
