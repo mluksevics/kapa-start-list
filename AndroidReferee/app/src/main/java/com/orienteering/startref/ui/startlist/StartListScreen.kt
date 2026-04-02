@@ -252,7 +252,7 @@ fun StartListScreen(
             runner = runner,
             availableClasses = availableClasses,
             availableClubs = availableClubs,
-            currentTimeMs = currentTimeMs,
+            currentTimeMs = currentTimeMs - (settings.prestartMinutes * 60_000L),
             onDismiss = { viewModel.selectRunner(null) },
             onSave = { updated -> viewModel.updateRunner(updated) }
         )

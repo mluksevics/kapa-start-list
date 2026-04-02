@@ -250,6 +250,13 @@ public class DbIsamRepository
                     _log($"{Ts()} DBISAM KatNr #{r.StartNumber} → {r.ClassId}: {(res.Success ? "OK" : $"ERROR {res.Message}")}");
                 }
 
+                // Fetch Nullzeit so we can detect pre-Nullzeit start times before calling the DLL.
+                // The DLL stores Start1 as centiseconds relative to Nullzeit; negative offsets are rejected.
+                var (etapResult, etapInfo) = db.GetEtapInfo(settings.DayNo);
+                double? nullzeitSeconds = etapResult.Success ? etapInfo!.Nullzeit / 100.0 : null;
+                if (nullzeitSeconds.HasValue)
+                    _log($"{Ts()} Nullzeit for day {settings.DayNo}: {etapInfo!.NullzeitFormatted} ({etapInfo.Nullzeit} cs)");
+
                 foreach (var r in startTimeUpdates)
                 {
                     ct.ThrowIfCancellationRequested();
@@ -260,6 +267,15 @@ public class DbIsamRepository
                         continue;
                     }
                     _log($"{Ts()} DBISAM StartTime #{r.StartNumber}: NEEDS change ('{snapshot?.StartTime ?? "-"}' → '{r.StartTime}')");
+
+                    // Guard: DLL rejects times before Nullzeit (relative offset would be negative).
+                    if (nullzeitSeconds.HasValue && TimeSpan.TryParse(r.StartTime, out var startTs) &&
+                        startTs.TotalSeconds < nullzeitSeconds.Value)
+                    {
+                        _log($"{Ts()} DBISAM StartTime #{r.StartNumber} → {r.StartTime}: SKIP — time is before Nullzeit ({etapInfo!.NullzeitFormatted}). DLL cannot store negative offsets. Fix in Delphi DLL needed.");
+                        continue;
+                    }
+
                     var res = db.ChangeStartTimeByStartNr(settings.DayNo, r.StartTime!, r.StartNumber);
                     _log($"{Ts()} DBISAM StartTime #{r.StartNumber} → {r.StartTime}: {(res.Success ? "OK" : $"ERROR {res.Message}")}");
                 }
