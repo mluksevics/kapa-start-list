@@ -5,64 +5,19 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Compass outer ring -->
+    <!-- Right mountain (lightest salmon) — drawn first so others appear in front -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="3"
-        android:pathData="M54,16 A38,38 0 1,0 54.001,16 Z"/>
+        android:fillColor="#F1948A"
+        android:pathData="M48,90 L48,54 L84,90 Z"/>
 
-    <!-- Cardinal tick marks -->
-    <!-- North tick -->
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="3"
-        android:pathData="M54,16 L54,24"/>
-    <!-- South tick -->
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="3"
-        android:pathData="M54,84 L54,92"/>
-    <!-- East tick -->
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="3"
-        android:pathData="M84,54 L92,54"/>
-    <!-- West tick -->
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="3"
-        android:pathData="M16,54 L24,54"/>
-
-    <!-- Compass needle - South half (white) -->
+    <!-- Middle mountain (medium red) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,87 L59,54 L54,51 L49,54 Z"/>
+        android:fillColor="#E74C3C"
+        android:pathData="M34,90 L34,38 L70,90 Z"/>
 
-    <!-- Compass needle - North half (orange) -->
+    <!-- Left mountain (darkest red) — drawn last, in front -->
     <path
-        android:fillColor="#FF6D00"
-        android:pathData="M54,21 L59,54 L54,57 L49,54 Z"/>
-
-    <!-- Center pivot dot (orange) -->
-    <path
-        android:fillColor="#FF6D00"
-        android:pathData="M54,47 A7,7 0 1,0 54.001,47 Z"/>
-
-    <!-- Center pivot dot inner (white) -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,50 A4,4 0 1,0 54.001,50 Z"/>
-
-    <!-- "N" mark at top of compass (two diagonal strokes) -->
-    <path
-        android:strokeColor="#FF6D00"
-        android:strokeWidth="2.5"
-        android:pathData="M49.5,10 L49.5,6 L54.5,10 L54.5,6"/>
-
-    <!-- SI chip badge — bottom right, rounded rectangle -->
-    <path
-        android:fillColor="#FF6D00"
-        android:pathData="M73,71 Q73,69 75,69 L93,69 Q95,69 95,71 L95,89 Q95,91 93,91 L75,91 Q73,91 73,89 Z"/>
-
-    <!-- SI chip contacts (white lines) -->
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="2"
-        android:pathData="M78,75 L90,75"/>
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="2"
-        android:pathData="M78,80 L90,80"/>
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="2"
-        android:pathData="M78,85 L86,85"/>
+        android:fillColor="#C0392B"
+        android:pathData="M20,90 L20,22 L56,90 Z"/>
 
 </vector>
