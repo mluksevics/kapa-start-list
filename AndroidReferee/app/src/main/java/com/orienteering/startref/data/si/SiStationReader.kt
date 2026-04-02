@@ -59,26 +59,22 @@ class SiStationReader @Inject constructor(
     // Accumulation buffer for parsing multi-byte SI protocol frames
     private val buffer = mutableListOf<Byte>()
 
-    private val audioStream get() =
-        if (loudSound) AudioManager.STREAM_ALARM else AudioManager.STREAM_MUSIC
-
     /** Positive confirmation — ascending two-tone "ta-daa". */
-    fun playSuccess() {
-        try {
-            ToneGenerator(audioStream, ToneGenerator.MAX_VOLUME)
-                .startTone(ToneGenerator.TONE_PROP_ACK, 600)
-        } catch (e: Exception) {
-            debugLog.log("playSuccess failed: ${e.message}")
-        }
-    }
+    fun playSuccess() = playTone(ToneGenerator.TONE_PROP_ACK, 600)
 
     /** Error / warning — continuous high-pitched beep. */
-    fun playError() {
+    fun playError() = playTone(ToneGenerator.TONE_CDMA_HIGH_L, 800)
+
+    private fun playTone(tone: Int, durationMs: Int) {
         try {
-            ToneGenerator(audioStream, ToneGenerator.MAX_VOLUME)
-                .startTone(ToneGenerator.TONE_CDMA_HIGH_L, 800)
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val stream = if (loudSound) AudioManager.STREAM_ALARM else AudioManager.STREAM_MUSIC
+            if (loudSound) {
+                audioManager.setStreamVolume(stream, audioManager.getStreamMaxVolume(stream), 0)
+            }
+            ToneGenerator(stream, ToneGenerator.MAX_VOLUME).startTone(tone, durationMs)
         } catch (e: Exception) {
-            debugLog.log("playError failed: ${e.message}")
+            debugLog.log("playTone failed: ${e.message}")
         }
     }
 
