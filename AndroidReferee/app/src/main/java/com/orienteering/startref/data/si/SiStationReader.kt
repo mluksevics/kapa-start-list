@@ -56,14 +56,23 @@ class SiStationReader @Inject constructor(
     // Accumulation buffer for parsing multi-byte SI protocol frames
     private val buffer = mutableListOf<Byte>()
 
-    private fun playBeep() {
+    /** Positive confirmation — ascending two-tone "ta-daa". Volume follows device media volume. */
+    fun playSuccess() {
         try {
-            // STREAM_ALARM ignores notification/media volume — always loud
-            // TONE_CDMA_HIGH_L is a continuous high-frequency tone, distinctive and scanner-like
-            ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
+            ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME)
+                .startTone(ToneGenerator.TONE_PROP_ACK, 600)
+        } catch (e: Exception) {
+            debugLog.log("playSuccess failed: ${e.message}")
+        }
+    }
+
+    /** Error / warning — continuous high-pitched beep. Volume follows device media volume. */
+    fun playError() {
+        try {
+            ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME)
                 .startTone(ToneGenerator.TONE_CDMA_HIGH_L, 800)
         } catch (e: Exception) {
-            debugLog.log("playBeep failed: ${e.message}")
+            debugLog.log("playError failed: ${e.message}")
         }
     }
 
@@ -252,7 +261,7 @@ class SiStationReader @Inject constructor(
                 }
                 debugLog.log("*** SI chip: $cardNum ***")
                 _cardReadEvents.trySend(cardNum.toString())
-                playBeep()
+                playSuccess()
                 sendAck()
             }
             i = frameEnd
