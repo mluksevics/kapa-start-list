@@ -8,6 +8,7 @@ import com.orienteering.startref.data.local.entity.RunnerEntity
 import com.orienteering.startref.data.remote.ApiClient
 import com.orienteering.startref.data.remote.RunnerDto
 import com.orienteering.startref.data.settings.SettingsDataStore
+import com.orienteering.startref.data.si.SiDebugLog
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -27,7 +28,8 @@ class SyncManager @Inject constructor(
     private val runnerDao: RunnerDao,
     private val lookupDao: LookupDao,
     private val apiClient: ApiClient,
-    private val settingsDataStore: SettingsDataStore
+    private val settingsDataStore: SettingsDataStore,
+    private val log: SiDebugLog
 ) {
     data class SyncDelta(
         val runnersChanged: Int,
@@ -57,7 +59,11 @@ class SyncManager @Inject constructor(
         try {
             val settings = settingsDataStore.settings.first()
             val changedSince = settings.lastServerTimeUtc.takeIf { it > 0 }
-            val result = apiClient.getRunners(settings.competitionDate, changedSince, settings) ?: return
+            log.log("Poll: GET runners (changedSince=${if (changedSince != null) "yes" else "full"})")
+            val result = apiClient.getRunners(settings.competitionDate, changedSince, settings) ?: run {
+                log.log("Poll: no response from server")
+                return
+            }
 
             val runnersChanged = result.runners.size
             val fieldHighlights = buildMap<Int, MutableSet<String>> {
@@ -72,6 +78,7 @@ class SyncManager @Inject constructor(
             val classNamesChanged = syncClassLookups(settings)
             val clubNamesChanged = syncClubLookups(settings)
             settingsDataStore.updateLastServerTimeUtc(result.serverTimeUtc)
+            log.log("Poll done: runners=$runnersChanged classes=$classNamesChanged clubs=$clubNamesChanged")
             if (runnersChanged > 0 || classNamesChanged > 0 || clubNamesChanged > 0 || fieldHighlights.isNotEmpty()) {
                 _syncDeltas.tryEmit(
                     SyncDelta(
@@ -82,6 +89,8 @@ class SyncManager @Inject constructor(
                     )
                 )
             }
+        } catch (e: Exception) {
+            log.log("Poll error: ${e.message}")
         } finally {
             _isSyncing.value = false
         }
@@ -91,6 +100,7 @@ class SyncManager @Inject constructor(
         _isSyncing.value = true
         try {
             val settings = settingsDataStore.settings.first()
+            log.log("Full sync: GET all runners")
             val result = apiClient.getRunners(settings.competitionDate, null, settings)
                 ?: throw IllegalStateException("No response from API – check API URL and competition date in Settings")
 
@@ -101,6 +111,7 @@ class SyncManager @Inject constructor(
             val classNamesChanged = syncClassLookups(settings)
             val clubNamesChanged = syncClubLookups(settings)
             settingsDataStore.updateLastServerTimeUtc(result.serverTimeUtc)
+            log.log("Full sync done: ${entities.size} runners, classes=$classNamesChanged clubs=$clubNamesChanged")
             _syncDeltas.tryEmit(
                 SyncDelta(
                     runnersChanged = entities.size,
@@ -118,7 +129,10 @@ class SyncManager @Inject constructor(
         _isSyncing.value = true
         return try {
             val settings = settingsDataStore.settings.first()
-            syncClassLookups(settings)
+            log.log("Pull classes")
+            val n = syncClassLookups(settings)
+            log.log("Pull classes done: $n updated")
+            n
         } finally {
             _isSyncing.value = false
         }
@@ -128,7 +142,10 @@ class SyncManager @Inject constructor(
         _isSyncing.value = true
         return try {
             val settings = settingsDataStore.settings.first()
-            syncClubLookups(settings)
+            log.log("Pull clubs")
+            val n = syncClubLookups(settings)
+            log.log("Pull clubs done: $n updated")
+            n
         } finally {
             _isSyncing.value = false
         }
