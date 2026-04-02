@@ -102,6 +102,14 @@ class StartListViewModel @Inject constructor(
     val isSyncing: StateFlow<Boolean> = syncManager.isSyncing
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    val canUndo: StateFlow<Boolean> = repository.canUndo
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val canRedo: StateFlow<Boolean> = repository.canRedo
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun undo() { viewModelScope.launch { repository.undo() } }
+    fun redo() { viewModelScope.launch { repository.redo() } }
+
     private val currentTimeMinute = _currentTimeMs
         .map { it / 60_000L }
         .stateIn(viewModelScope, SharingStarted.Eagerly, System.currentTimeMillis() / 60_000L)

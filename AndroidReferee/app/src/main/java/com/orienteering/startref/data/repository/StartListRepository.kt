@@ -16,6 +16,7 @@ import com.orienteering.startref.data.remote.ApiClient
 import com.orienteering.startref.data.settings.SettingsDataStore
 import com.orienteering.startref.data.sync.SyncManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -36,8 +37,11 @@ class StartListRepository @Inject constructor(
     private val syncManager: SyncManager,
     private val apiClient: ApiClient,
     private val settingsDataStore: SettingsDataStore,
+    private val undoRedoStack: UndoRedoStack,
     @ApplicationContext private val context: Context
 ) {
+    val canUndo: StateFlow<Boolean> = undoRedoStack.canUndo
+    val canRedo: StateFlow<Boolean> = undoRedoStack.canRedo
     fun observeRunners(): Flow<List<RunnerEntity>> = runnerDao.observeAll()
 
     fun observeClassStartPlaces(): Flow<Map<Int, Int>> =
@@ -85,6 +89,35 @@ class StartListRepository @Inject constructor(
         setStatus(startNumber, newStatusId)
     }
 
+    suspend fun undo() {
+        val before = undoRedoStack.popUndo() ?: return
+        restore(before)
+    }
+
+    suspend fun redo() {
+        val after = undoRedoStack.popRedo() ?: return
+        restore(after)
+    }
+
+    /** Restores a runner to the DB and syncs without recording to undo stack. */
+    private suspend fun restore(runner: RunnerEntity) {
+        val settings = settingsDataStore.settings.first()
+        val now = System.currentTimeMillis()
+        val restored = runner.copy(lastModifiedAt = now, lastModifiedBy = settings.deviceName)
+        runnerDao.update(restored)
+        enqueuePatch(
+            type = PendingSyncEntity.TYPE_EDIT,
+            competitionDate = settings.competitionDate,
+            startNumber = runner.startNumber,
+            payload = buildPatchPayload {
+                put("statusId", runner.statusId)
+                put("siChipNo", runner.siCard)
+            },
+            lastModifiedAtMs = now,
+            settings = settings
+        )
+    }
+
     private suspend fun setStatus(startNumber: Int, statusId: Int) {
         val settings = settingsDataStore.settings.first()
         val runner = runnerDao.getByStartNumber(startNumber) ?: return
@@ -95,6 +128,7 @@ class StartListRepository @Inject constructor(
             lastModifiedAt = now,
             lastModifiedBy = settings.deviceName
         )
+        undoRedoStack.record(runner, updated)
         runnerDao.update(updated)
         enqueuePatch(
             type = PendingSyncEntity.TYPE_STATUS,
@@ -116,6 +150,7 @@ class StartListRepository @Inject constructor(
             lastModifiedAt = now,
             lastModifiedBy = settings.deviceName
         )
+        undoRedoStack.record(runner, updated)
         runnerDao.update(updated)
         enqueuePatch(
             type = PendingSyncEntity.TYPE_EDIT,
@@ -129,8 +164,10 @@ class StartListRepository @Inject constructor(
 
     suspend fun updateRunner(runner: RunnerEntity) {
         val settings = settingsDataStore.settings.first()
+        val existing = runnerDao.getByStartNumber(runner.startNumber)
         val now = System.currentTimeMillis()
         val updated = runner.copy(lastModifiedAt = now, lastModifiedBy = settings.deviceName)
+        if (existing != null) undoRedoStack.record(existing, updated)
         runnerDao.update(updated)
         enqueuePatch(
             type = PendingSyncEntity.TYPE_EDIT,

@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.orienteering.startref.data.local.entity.RunnerEntity
+import com.orienteering.startref.ui.common.UndoRedoButtons
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -45,12 +46,17 @@ private val clockFormatter = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(Zo
 @Composable
 fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val canUndo by viewModel.canUndo.collectAsStateWithLifecycle()
+    val canRedo by viewModel.canRedo.collectAsStateWithLifecycle()
 
     Scaffold { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+        ) {
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
             // SI Reader connection status strip
             SiStatusStrip(connected = state.readerConnected)
@@ -107,10 +113,10 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
                         }
                     }
                     OutlinedButton(
-                        onClick = { viewModel.handleManually() },
+                        onClick = { viewModel.dismiss() },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Handle Manually")
+                        Text("Dismiss")
                     }
                 }
             }
@@ -124,7 +130,18 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(12.dp)
             )
-        }
+        } // end Column
+
+        UndoRedoButtons(
+            canUndo = canUndo,
+            canRedo = canRedo,
+            onUndo = { viewModel.undo() },
+            onRedo = { viewModel.redo() },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        )
+        } // end Box
     }
 }
 
@@ -192,7 +209,7 @@ private fun RunnerGateRow(
         isStarted     -> Color(0xFF4CAF50)   // steady green — runner has started
         else          -> Color.Transparent
     }
-    val normalStyle = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold)
+    val normalStyle = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.Bold)
     val narrowStyle = normalStyle.copy(textGeometricTransform = TextGeometricTransform(scaleX = 0.7f))
     Row(
         modifier = Modifier

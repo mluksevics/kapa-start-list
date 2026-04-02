@@ -52,6 +52,14 @@ class GateViewModel @Inject constructor(
     private val settings: StateFlow<AppSettings> = settingsDataStore.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings.DEFAULT)
 
+    val canUndo: StateFlow<Boolean> = repository.canUndo
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val canRedo: StateFlow<Boolean> = repository.canRedo
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun undo() { viewModelScope.launch { repository.undo() } }
+    fun redo() { viewModelScope.launch { repository.redo() } }
+
     init {
         // Clock tick
         viewModelScope.launch {
@@ -103,12 +111,12 @@ class GateViewModel @Inject constructor(
     }
 
     /** Keep chip remembered and rows clickable so referee can tap to assign. */
-    fun handleManually() {
+    fun dismiss() {
         val siCard = _uiState.value.lastReadSiCard ?: return
         _uiState.update { it.copy(
             signal = GateSignal.RED,
             pendingApproveRunner = null,
-            statusLine = "Manual — tap runner to assign SI $siCard"
+            statusLine = "Dismissed — tap runner to assign SI $siCard"
         ) }
     }
 

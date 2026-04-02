@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.orienteering.startref.ui.common.UndoRedoButtons
 import com.orienteering.startref.ui.edituser.ChipQuickEditDialog
 import com.orienteering.startref.ui.edituser.EditUserDialog
 import com.orienteering.startref.ui.startlist.components.RunnerRow
@@ -76,6 +77,8 @@ fun StartListScreen(
 
     val highlightedStartNumber by viewModel.highlightedStartNumber.collectAsStateWithLifecycle()
     val readerConnected by viewModel.readerConnected.collectAsStateWithLifecycle()
+    val canUndo by viewModel.canUndo.collectAsStateWithLifecycle()
+    val canRedo by viewModel.canRedo.collectAsStateWithLifecycle()
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -231,6 +234,16 @@ fun StartListScreen(
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             }
+
+            UndoRedoButtons(
+                canUndo = canUndo,
+                canRedo = canRedo,
+                onUndo = { viewModel.undo() },
+                onRedo = { viewModel.redo() },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp)
+            )
         }
     }
 
