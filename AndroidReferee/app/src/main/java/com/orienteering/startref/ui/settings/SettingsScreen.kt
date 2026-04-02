@@ -65,7 +65,6 @@ fun SettingsScreen(
     var headerText by rememberSaveable { mutableStateOf("") }
     var pollIntervalStr by rememberSaveable { mutableStateOf("") }
     var prestartStr by rememberSaveable { mutableStateOf("") }
-    var lateStartStr by rememberSaveable { mutableStateOf("") }
     var deviceName by rememberSaveable { mutableStateOf("") }
     // NOT rememberSaveable — must reset to false on every navigation to this screen
     var fieldsReady by remember { mutableStateOf(false) }
@@ -79,7 +78,6 @@ fun SettingsScreen(
             headerText = s.headerText
             pollIntervalStr = s.pollIntervalSeconds.toString()
             prestartStr = s.prestartMinutes.toString()
-            lateStartStr = s.lateStartMinutes.toString()
             deviceName = s.deviceName
             fieldsReady = true
         }
@@ -280,19 +278,6 @@ fun SettingsScreen(
                     onValueChange = {
                         prestartStr = it
                         it.toIntOrNull()?.let { v -> viewModel.updatePrestartMinutes(v) }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-            }
-
-            SettingField(label = "Late start adjustment (minutes, any size — use large value to test scroll)") {
-                OutlinedTextField(
-                    value = lateStartStr,
-                    onValueChange = {
-                        lateStartStr = it
-                        it.toIntOrNull()?.let { v -> viewModel.updateLateStartMinutes(v) }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,

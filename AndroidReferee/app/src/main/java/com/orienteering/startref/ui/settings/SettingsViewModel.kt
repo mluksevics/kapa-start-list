@@ -81,7 +81,6 @@ class SettingsViewModel @Inject constructor(
     fun updateStartPlace(value: Int) = viewModelScope.launch { settingsDataStore.updateStartPlace(value) }
     fun updateHeaderText(value: String) = viewModelScope.launch { settingsDataStore.updateHeaderText(value) }
     fun updatePrestartMinutes(value: Int) = viewModelScope.launch { settingsDataStore.updatePrestartMinutes(value) }
-    fun updateLateStartMinutes(value: Int) = viewModelScope.launch { settingsDataStore.updateLateStartMinutes(value) }
     fun updateSoundEnabled(value: Boolean) = viewModelScope.launch { settingsDataStore.updateSoundEnabled(value) }
     fun updateVibrationEnabled(value: Boolean) = viewModelScope.launch { settingsDataStore.updateVibrationEnabled(value) }
     fun updateRowFontSize(value: Float) = viewModelScope.launch { settingsDataStore.updateRowFontSize(value) }

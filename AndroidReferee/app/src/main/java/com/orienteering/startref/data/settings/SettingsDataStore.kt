@@ -30,7 +30,6 @@ class SettingsDataStore @Inject constructor(
         val START_PLACE = intPreferencesKey("start_place")
         val HEADER_TEXT = stringPreferencesKey("header_text")
         val PRESTART_MINUTES = intPreferencesKey("prestart_minutes")
-        val LATE_START_MINUTES = intPreferencesKey("late_start_minutes")
         val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
         val ROW_FONT_SIZE = floatPreferencesKey("row_font_size")
@@ -49,7 +48,6 @@ class SettingsDataStore @Inject constructor(
             startPlace = prefs[Keys.START_PLACE] ?: AppSettings.DEFAULT.startPlace,
             headerText = prefs[Keys.HEADER_TEXT] ?: AppSettings.DEFAULT.headerText,
             prestartMinutes = prefs[Keys.PRESTART_MINUTES] ?: AppSettings.DEFAULT.prestartMinutes,
-            lateStartMinutes = prefs[Keys.LATE_START_MINUTES] ?: AppSettings.DEFAULT.lateStartMinutes,
             soundEnabled = prefs[Keys.SOUND_ENABLED] ?: AppSettings.DEFAULT.soundEnabled,
             vibrationEnabled = prefs[Keys.VIBRATION_ENABLED] ?: AppSettings.DEFAULT.vibrationEnabled,
             rowFontSize = prefs[Keys.ROW_FONT_SIZE] ?: AppSettings.DEFAULT_FONT_SIZE,
@@ -68,7 +66,6 @@ class SettingsDataStore @Inject constructor(
     suspend fun updateStartPlace(value: Int) = context.dataStore.edit { it[Keys.START_PLACE] = value }
     suspend fun updateHeaderText(value: String) = context.dataStore.edit { it[Keys.HEADER_TEXT] = value }
     suspend fun updatePrestartMinutes(value: Int) = context.dataStore.edit { it[Keys.PRESTART_MINUTES] = value }
-    suspend fun updateLateStartMinutes(value: Int) = context.dataStore.edit { it[Keys.LATE_START_MINUTES] = value }
     suspend fun updateSoundEnabled(value: Boolean) = context.dataStore.edit { it[Keys.SOUND_ENABLED] = value }
     suspend fun updateVibrationEnabled(value: Boolean) = context.dataStore.edit { it[Keys.VIBRATION_ENABLED] = value }
     suspend fun updateRowFontSize(value: Float) = context.dataStore.edit { it[Keys.ROW_FONT_SIZE] = value }

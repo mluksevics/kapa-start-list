@@ -114,7 +114,7 @@ class StartListViewModel @Inject constructor(
         _runnerFieldHighlights
     ) { runners, classStartPlaces, timeMinute, appSettings, highlights ->
         val s = appSettings
-        val adjustedMinute = timeMinute - s.lateStartMinutes - s.prestartMinutes
+        val adjustedMinute = timeMinute - s.prestartMinutes
         val tod = ((adjustedMinute.toInt() % (24 * 60)) + (24 * 60)) % (24 * 60)
         val filtered = if (s.startPlace == 0) runners
         else runners.filter { classStartPlaces[it.classId] == s.startPlace }
@@ -273,7 +273,7 @@ class StartListViewModel @Inject constructor(
 
     fun highlightedTimeOfDay(timeMs: Long = _currentTimeMs.value): Int {
         val s = settings.value
-        val adjustedMs = timeMs - (s.lateStartMinutes * 60_000L) - (s.prestartMinutes * 60_000L)
+        val adjustedMs = timeMs - (s.prestartMinutes * 60_000L)
         return ((adjustedMs / 60_000).toInt() % (24 * 60) + 24 * 60) % (24 * 60)
     }
 

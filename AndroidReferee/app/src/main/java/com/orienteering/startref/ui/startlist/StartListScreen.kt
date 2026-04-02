@@ -129,8 +129,7 @@ fun StartListScreen(
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             val adjustedTimeMs = currentTimeMs -
-                                (settings.prestartMinutes * 60_000L) -
-                                (settings.lateStartMinutes * 60_000L)
+                                (settings.prestartMinutes * 60_000L)
                             Text(
                                 clockFormatter.format(Instant.ofEpochMilli(adjustedTimeMs)),
                                 style = MaterialTheme.typography.titleMedium

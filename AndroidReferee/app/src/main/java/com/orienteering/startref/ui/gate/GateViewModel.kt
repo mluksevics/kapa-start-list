@@ -55,7 +55,7 @@ class GateViewModel @Inject constructor(
                 val now = System.currentTimeMillis()
                 updateCurrentMinuteRunners(now)
                 val s = settings.value
-                val adjustedMs = now - (s.prestartMinutes * 60_000L) - (s.lateStartMinutes * 60_000L)
+                val adjustedMs = now - (s.prestartMinutes * 60_000L)
                 _uiState.value = _uiState.value.copy(currentTimeMs = now, adjustedCurrentTimeMs = adjustedMs)
                 delay(1000 - (now % 1000))
             }
