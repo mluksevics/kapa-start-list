@@ -58,8 +58,10 @@ class SiStationReader @Inject constructor(
 
     private fun playBeep() {
         try {
-            ToneGenerator(AudioManager.STREAM_NOTIFICATION, ToneGenerator.MAX_VOLUME)
-                .startTone(ToneGenerator.TONE_PROP_BEEP, 600)
+            // STREAM_ALARM ignores notification/media volume — always loud
+            // TONE_CDMA_HIGH_L is a continuous high-frequency tone, distinctive and scanner-like
+            ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
+                .startTone(ToneGenerator.TONE_CDMA_HIGH_L, 800)
         } catch (e: Exception) {
             debugLog.log("playBeep failed: ${e.message}")
         }
