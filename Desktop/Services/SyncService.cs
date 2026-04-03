@@ -184,7 +184,7 @@ public class SyncService
 
         var now = DateTimeOffset.UtcNow;
         int totalInserted = 0, totalUpdated = 0, totalUnchanged = 0;
-        var chunks = runners.Chunk(100).ToList();
+        var chunks = runners.Chunk(500).ToList();
         _log($"{Ts()} Force Push: uploading {runners.Count} runner(s) in {chunks.Count} chunk(s)...");
 
         for (int i = 0; i < chunks.Count; i++)
@@ -212,7 +212,7 @@ public class SyncService
         _log($"{Ts()} Force Push: all done — inserted={totalInserted} updated={totalUpdated} unchanged={totalUnchanged}");
     }
 
-    /// <summary>Push all eligible rows from DBISAM in chunks of 100; API compares and only bumps LastModified when values differ.</summary>
+    /// <summary>Push all eligible rows from DBISAM in chunks of 500; API compares and only bumps LastModified when values differ.</summary>
     public async Task PushAllChangesAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
@@ -234,7 +234,7 @@ public class SyncService
             r.LastModifiedUtc = now;
 
         int totalInserted = 0, totalUpdated = 0, totalUnchanged = 0;
-        var chunks = meaningful.Chunk(100).ToList();
+        var chunks = meaningful.Chunk(500).ToList();
         _log($"{Ts()} Push Updates: uploading {meaningful.Count} runner(s) in {chunks.Count} chunk(s)...");
 
         for (int i = 0; i < chunks.Count; i++)

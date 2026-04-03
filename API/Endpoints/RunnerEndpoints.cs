@@ -9,10 +9,11 @@ public static class RunnerEndpoints
 {
     public static void MapRunnerEndpoints(this WebApplication app)
     {
-        // GET /api/competitions/{date}/runners?changedSince=ISO
+        // GET /api/competitions/{date}/runners?changedSince=ISO&excludeSource=deviceName
         app.MapGet("/api/competitions/{date}/runners", async (
             string date,
             DateTimeOffset? changedSince,
+            string? excludeSource,
             AppDbContext db) =>
         {
             if (!DateOnly.TryParse(date, out var competitionDate))
@@ -36,6 +37,9 @@ public static class RunnerEndpoints
 
             if (changedSince.HasValue)
                 query = query.Where(r => r.LastModifiedUtc > changedSince.Value);
+
+            if (!string.IsNullOrEmpty(excludeSource))
+                query = query.Where(r => r.LastModifiedBy != excludeSource);
 
             var runnerEntities = await query.OrderBy(r => r.StartNumber).ToListAsync();
 

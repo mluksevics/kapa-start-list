@@ -48,15 +48,20 @@ public class ApiClient
 
     private AppSettings S => _getSettings();
 
-    /// <summary>GET /api/competitions/{date}/runners[?changedSince=ISO]</summary>
+    /// <summary>GET /api/competitions/{date}/runners[?changedSince=ISO&amp;excludeSource=name]</summary>
     public async Task<GetRunnersResponse?> GetRunnersAsync(
         string date,
         DateTimeOffset? changedSince = null,
         CancellationToken ct = default)
     {
         var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/competitions/{date}/runners";
+        var sep = '?';
         if (changedSince.HasValue)
+        {
             url += $"?changedSince={Uri.EscapeDataString(changedSince.Value.ToString("O"))}";
+            sep = '&';
+        }
+        url += $"{sep}excludeSource={Uri.EscapeDataString(S.DeviceName)}";
 
         return await GetRunnersRawAsync(url, ct);
     }
@@ -95,11 +100,15 @@ public class ApiClient
 
         try
         {
+            var (_, bodySize) = GzipJson(request);
+            _log?.Invoke($"{DateTime.Now:HH:mm:ss} API PUT {request.Runners.Count} runners, {bodySize / 1024.0:F1} KB gzipped");
+
             var response = await _retryPipeline.ExecuteAsync(async token =>
             {
+                var (content, _) = GzipJson(request);
                 var msg = new HttpRequestMessage(HttpMethod.Put, url)
                 {
-                    Content = GzipJson(request)
+                    Content = content
                 };
                 msg.Headers.Add("X-Api-Key", S.ApiKey);
                 return await _http.SendAsync(msg, token);
@@ -240,15 +249,16 @@ public class ApiClient
         return $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}. {body}";
     }
 
-    private static StreamContent GzipJson<T>(T obj)
+    private static (StreamContent Content, long ByteSize) GzipJson<T>(T obj)
     {
         var ms = new MemoryStream();
         using (var gzip = new GZipStream(ms, CompressionLevel.Fastest, leaveOpen: true))
             JsonSerializer.Serialize(gzip, obj);
+        var size = ms.Length;
         ms.Position = 0;
         var content = new StreamContent(ms);
         content.Headers.ContentType = new("application/json") { CharSet = "utf-8" };
         content.Headers.ContentEncoding.Add("gzip");
-        return content;
+        return (content, size);
     }
 }
