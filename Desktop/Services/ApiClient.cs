@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Polly;
 using Polly.Retry;
 using StartRef.Desktop.Models;
@@ -21,7 +23,10 @@ public class ApiClient
     {
         _getSettings = getSettings;
         _log = log;
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        _http = new HttpClient(new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Brotli })
+        {
+            Timeout = TimeSpan.FromSeconds(30)
+        };
         _retryPipeline = new ResiliencePipelineBuilder<HttpResponseMessage>()
             .AddRetry(new RetryStrategyOptions<HttpResponseMessage>
             {
@@ -94,7 +99,7 @@ public class ApiClient
             {
                 var msg = new HttpRequestMessage(HttpMethod.Put, url)
                 {
-                    Content = JsonContent.Create(request)
+                    Content = GzipJson(request)
                 };
                 msg.Headers.Add("X-Api-Key", S.ApiKey);
                 return await _http.SendAsync(msg, token);
@@ -233,5 +238,17 @@ public class ApiClient
         if (body.Length > 300)
             body = body[..300];
         return $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}. {body}";
+    }
+
+    private static StreamContent GzipJson<T>(T obj)
+    {
+        var ms = new MemoryStream();
+        using (var gzip = new GZipStream(ms, CompressionLevel.Fastest, leaveOpen: true))
+            JsonSerializer.Serialize(gzip, obj);
+        ms.Position = 0;
+        var content = new StreamContent(ms);
+        content.Headers.ContentType = new("application/json") { CharSet = "utf-8" };
+        content.Headers.ContentEncoding.Add("gzip");
+        return content;
     }
 }

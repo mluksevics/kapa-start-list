@@ -27,6 +27,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
                 errorNumbersToAdd: new[] { SqlDatabaseNotCurrentlyAvailable });
         }));
 
+builder.Services.AddRequestDecompression();
 builder.Services.AddResponseCompression(options =>
 {
     options.EnableForHttps = true;
@@ -63,6 +64,7 @@ await using (var scope = app.Services.CreateAsyncScope())
     }
 }
 
+app.UseRequestDecompression();
 app.UseResponseCompression();
 app.UseMiddleware<ApiKeyAuthMiddleware>();
 
