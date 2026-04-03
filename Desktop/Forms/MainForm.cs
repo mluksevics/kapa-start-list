@@ -525,6 +525,7 @@ public partial class MainForm : Form
             await Task.Run(() => _syncService.RunCycleAsync(cts.Token), cts.Token);
             AppendLog($"{DateTime.Now:HH:mm:ss} Push all changes step 2/2: uploading.");
             await Task.Run(() => _syncService.PushAllChangesAsync(cts.Token), cts.Token);
+            lblLastAutoPush.Text = DateTime.Now.ToString("HH:mm:ss");
         }
         catch (OperationCanceledException)
         {

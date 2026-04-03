@@ -136,7 +136,7 @@ partial class MainForm
         {
             Minimum = 10,
             Maximum = 3600,
-            Value = 60,
+            Value = 30,
             Width = 60,
             Location = new System.Drawing.Point(258, y)
         };
@@ -160,7 +160,8 @@ partial class MainForm
         {
             Text = "Auto-push enabled",
             Location = new System.Drawing.Point(10, y),
-            AutoSize = true
+            AutoSize = true,
+            Checked = true
         };
         chkAutoPush.CheckedChanged += chkAutoPush_CheckedChanged;
 
@@ -169,7 +170,7 @@ partial class MainForm
         {
             Minimum = 10,
             Maximum = 3600,
-            Value = 60,
+            Value = 600,
             Width = 60,
             Location = new System.Drawing.Point(258, y)
         };

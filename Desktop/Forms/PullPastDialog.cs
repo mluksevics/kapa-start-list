@@ -10,7 +10,7 @@ public class PullPastDialog : Form
     {
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
         Text = "Pull Past";
-        Size = new System.Drawing.Size(420, 180);
+        Size = new System.Drawing.Size(560, 180);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
@@ -40,10 +40,10 @@ public class PullPastDialog : Form
             Minimum = 1,
             Maximum = 1440,
             Value = 15,
-            Width = 75,
-            Location = new(320, y + 4)
+            Width = 70,
+            Location = new(400, y + 4)
         };
-        var lblMin = new Label { Text = "min", Location = new(372, y + 8), Size = new(30, 20) };
+        var lblMin = new Label { Text = "min", Location = new(474, y + 8), Size = new(30, 20) };
         y += 42;
 
         var btnPull = new Button
