@@ -365,6 +365,7 @@ public partial class MainForm : Form
         btnPeekWebApi.Enabled = false;
         btnPullPast.Enabled = false;
         btnDeleteTodayData.Enabled = false;
+        btnResetDayData.Enabled = false;
         StartRunningStatus(commandName);
         return true;
     }
@@ -385,6 +386,7 @@ public partial class MainForm : Form
         btnPeekWebApi.Enabled = true;
         btnPullPast.Enabled = true;
         btnDeleteTodayData.Enabled = true;
+        btnResetDayData.Enabled = true;
         StopRunningStatus();
         if (_settings.AutoSyncEnabled && _pushActionsEnabled) _syncService.Start();
     }
@@ -752,6 +754,45 @@ public partial class MainForm : Form
         }
     }
 
+    private async void btnResetDayData_Click(object sender, EventArgs e)
+    {
+        if (!EnsureDbAvailableForPush("Reset Day Data")) return;
+
+        var selectedDate = DateOnly.FromDateTime(dtpDbDate.Value.Date).ToString("yyyy-MM-dd");
+        if (MessageBox.Show(
+                $"Reset Day Data will DELETE all API data for {selectedDate}, then re-upload everything from DBISAM.\n\nContinue?",
+                "Confirm Reset Day Data",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning) != DialogResult.Yes)
+            return;
+
+        if (MessageBox.Show(
+                $"This will WIPE {selectedDate} from the API and re-upload from DBISAM.\n\nAre you absolutely sure?",
+                "Final confirmation",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Stop) != DialogResult.Yes)
+            return;
+
+        if (!TryBeginCancelableCommand("Reset Day Data")) return;
+        var cts = _cancelSyncCts;
+        if (cts is null) return;
+        UpdateStatusLabel($"Resetting {selectedDate}...");
+        try
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Reset Day Data initiated for {selectedDate}.");
+            await Task.Run(() => _syncService.ResetDayDataAsync(cts.Token), cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            AppendLog($"{DateTime.Now:HH:mm:ss} Reset Day Data cancelled by user.");
+        }
+        finally
+        {
+            EndCancelableCommand();
+            UpdateStatusLabel("Idle");
+        }
+    }
+
     private void btnCancelSync_Click(object sender, EventArgs e)
     {
         if (_cancelSyncCts is null || _cancelSyncCts.IsCancellationRequested) return;
@@ -785,6 +826,7 @@ public partial class MainForm : Form
         btnPeekWebApi.Enabled = false;
         btnPullPast.Enabled = false;
         btnDeleteTodayData.Enabled = false;
+        btnResetDayData.Enabled = false;
         StartRunningStatus("Auto-pull");
         AppendLog($"{DateTime.Now:HH:mm:ss} Auto-pull started.");
     }
@@ -807,6 +849,7 @@ public partial class MainForm : Form
         btnPeekWebApi.Enabled = true;
         btnPullPast.Enabled = true;
         btnDeleteTodayData.Enabled = true;
+        btnResetDayData.Enabled = true;
         StopRunningStatus();
         UpdateStatusLabel("Idle");
     }

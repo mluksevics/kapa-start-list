@@ -22,7 +22,7 @@ partial class MainForm
     private Label lblIntervalUnit;
     private Label lblLastSyncCaption, lblLastSync;
     private CheckBox chkTestMode;
-    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnUploadNewRunners, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, btnAdvancedToggle;
+    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnUploadNewRunners, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnDeleteTodayData, btnResetDayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, btnAdvancedToggle;
     private CheckBox chkAutoPush;
     private NumericUpDown nudAutoPushInterval;
     private Label lblAutoPushIntervalCaption, lblAutoPushIntervalUnit, lblLastAutoPushCaption, lblLastAutoPush;
@@ -309,6 +309,15 @@ partial class MainForm
         btnUploadNewRunners.Click += btnUploadNewRunners_Click;
         tipUi.SetToolTip(btnUploadNewRunners, "Upload DBISAM runners missing on API or changed vs Registered/DNS (e.g. after MldKen changes)");
 
+        btnResetDayData = new Button
+        {
+            Text = "Reset Day",
+            Size = new System.Drawing.Size(88, 30),
+            Margin = new Padding(0, 0, 8, 8)
+        };
+        btnResetDayData.Click += btnResetDayData_Click;
+        tipUi.SetToolTip(btnResetDayData, "Delete all API data for this date, then re-upload clubs, classes, and all runners from DBISAM");
+
         btnDbExplorer = new Button
         {
             Text = "E",
@@ -320,6 +329,7 @@ partial class MainForm
         flowAdvanced.Controls.Add(btnForcePush);
         flowAdvanced.Controls.Add(btnForcePushRange);
         flowAdvanced.Controls.Add(btnDeleteTodayData);
+        flowAdvanced.Controls.Add(btnResetDayData);
         flowAdvanced.Controls.Add(btnUploadNewRunners);
         flowAdvanced.Controls.Add(btnDbExplorer);
 

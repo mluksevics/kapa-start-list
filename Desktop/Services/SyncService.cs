@@ -322,6 +322,45 @@ public class SyncService
         return TimeOnly.TryParse(s, out var to) ? to.ToString("HH:mm:ss") : s;
     }
 
+    /// <summary>
+    /// Reset API day data: delete all existing data for the competition date, then re-upload
+    /// all runners, clubs, and classes from DBISAM.
+    /// </summary>
+    public async Task ResetDayDataAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var settings = _getSettings();
+        var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
+
+        // Step 1: Delete all existing data on the API
+        _log($"{Ts()} Reset: step 1/4 — deleting API data for {date}...");
+        var deleteResult = await _api.DeleteCompetitionDataAsync(date, ct);
+        if (deleteResult is null)
+        {
+            _log($"{Ts()} Reset: delete failed — {_api.LastError ?? "API unreachable"}. Aborting reset.");
+            return;
+        }
+        _log($"{Ts()} Reset: deleted runners={deleteResult.DeletedRunners} competitions={deleteResult.DeletedCompetitions} classes={deleteResult.DeletedClasses} clubs={deleteResult.DeletedClubs}");
+
+        // Step 2: Push clubs
+        _log($"{Ts()} Reset: step 2/4 — uploading clubs...");
+        await PushClubsAsync(ct);
+
+        // Step 3: Push classes
+        _log($"{Ts()} Reset: step 3/4 — uploading classes...");
+        await PushClassesAsync(ct);
+
+        // Step 4: Force push all runners
+        _log($"{Ts()} Reset: step 4/4 — uploading all runners (force push)...");
+        await ForcePushAllAsync(ct);
+
+        // Clear watermark so next sync does a full pull
+        settings.SetWatermark(date, DateTimeOffset.MinValue);
+        settings.Save();
+
+        _log($"{Ts()} Reset: completed for {date}.");
+    }
+
     public async Task<UpsertLookupResponse?> PushClubsAsync(CancellationToken ct = default)
     {
         var settings = _getSettings();

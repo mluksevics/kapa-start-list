@@ -22,8 +22,12 @@ public static class RunnerEndpoints
 
             var serverTimeUtc = DateTimeOffset.UtcNow;
 
-            var classNames = await db.Classes.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name);
-            var clubNames  = await db.Clubs.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name);
+            var classNames = await db.Classes.AsNoTracking()
+                .Where(c => c.CompetitionDate == competitionDate)
+                .ToDictionaryAsync(c => c.Id, c => c.Name);
+            var clubNames  = await db.Clubs.AsNoTracking()
+                .Where(c => c.CompetitionDate == competitionDate)
+                .ToDictionaryAsync(c => c.Id, c => c.Name);
 
             var query = db.Runners
                 .AsNoTracking()
@@ -70,9 +74,9 @@ public static class RunnerEndpoints
         // PUT /api/competitions/{date}/runners?touchAll=true — bulk upload (touchAll bumps every row)
         app.MapPut("/api/competitions/{date}/runners", async (
             string date,
-            bool touchAll,
             BulkUploadRequest request,
-            AppDbContext db) =>
+            AppDbContext db,
+            bool touchAll = false) =>
         {
             if (!DateOnly.TryParse(date, out var competitionDate))
                 return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
@@ -100,11 +104,11 @@ public static class RunnerEndpoints
             var incomingClasses = request.Runners
                 .Where(r => r.ClassId > 0 && !string.IsNullOrEmpty(r.ClassName))
                 .GroupBy(r => r.ClassId)
-                .Select(g => new Class { Id = g.Key, Name = g.First().ClassName, StartPlace = 0 });
+                .Select(g => new Class { CompetitionDate = competitionDate, Id = g.Key, Name = g.First().ClassName, StartPlace = 0 });
 
             foreach (var cls in incomingClasses)
             {
-                var existing = await db.Classes.FindAsync(cls.Id);
+                var existing = await db.Classes.FindAsync(competitionDate, cls.Id);
                 if (existing is null)
                     db.Classes.Add(cls);
                 else if (existing.Name != cls.Name)
@@ -114,11 +118,11 @@ public static class RunnerEndpoints
             var incomingClubs = request.Runners
                 .Where(r => r.ClubId > 0 && !string.IsNullOrEmpty(r.ClubName))
                 .GroupBy(r => r.ClubId)
-                .Select(g => new Club { Id = g.Key, Name = g.First().ClubName });
+                .Select(g => new Club { CompetitionDate = competitionDate, Id = g.Key, Name = g.First().ClubName });
 
             foreach (var club in incomingClubs)
             {
-                var existing = await db.Clubs.FindAsync(club.Id);
+                var existing = await db.Clubs.FindAsync(competitionDate, club.Id);
                 if (existing is null)
                     db.Clubs.Add(club);
                 else if (existing.Name != club.Name)
@@ -189,9 +193,16 @@ public static class RunnerEndpoints
                             anyChange = true;
                         }
 
-                        existing.LastModifiedUtc = utcNow;
-                        existing.LastModifiedBy = request.Source;
-                        updated++;
+                        if (anyChange)
+                        {
+                            existing.LastModifiedUtc = utcNow;
+                            existing.LastModifiedBy = request.Source;
+                            updated++;
+                        }
+                        else
+                        {
+                            unchanged++;
+                        }
                     }
                     else
                     {
@@ -476,8 +487,12 @@ public static class RunnerEndpoints
         await EnsureCompetitionExistsAsync(db, competitionDate);
 
         var serverTimeUtc = DateTimeOffset.UtcNow;
-        var classNames = await db.Classes.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name);
-        var clubNames  = await db.Clubs.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name);
+        var classNames = await db.Classes.AsNoTracking()
+            .Where(c => c.CompetitionDate == competitionDate)
+            .ToDictionaryAsync(c => c.Id, c => c.Name);
+        var clubNames  = await db.Clubs.AsNoTracking()
+            .Where(c => c.CompetitionDate == competitionDate)
+            .ToDictionaryAsync(c => c.Id, c => c.Name);
 
         var runnerEntities = await db.Runners
             .AsNoTracking()
