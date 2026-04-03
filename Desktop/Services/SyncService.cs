@@ -293,6 +293,7 @@ public class SyncService
     public async Task<UpsertLookupResponse?> PushClubsAsync(CancellationToken ct = default)
     {
         var settings = _getSettings();
+        var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
         var clubs = await Task.Run(() => _dbIsamRepository.GetAllClubs(settings), ct);
 
         if (clubs.Count == 0)
@@ -301,7 +302,7 @@ public class SyncService
             return new UpsertLookupResponse();
         }
 
-        var response = await _api.UpsertClubsAsync(new UpsertLookupRequest
+        var response = await _api.UpsertClubsAsync(date, new UpsertLookupRequest
         {
             Source = settings.DeviceName,
             LastModifiedUtc = DateTimeOffset.UtcNow,
@@ -319,6 +320,7 @@ public class SyncService
     public async Task<UpsertLookupResponse?> PushClassesAsync(CancellationToken ct = default)
     {
         var settings = _getSettings();
+        var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
         var classes = await Task.Run(() => _dbIsamRepository.GetAllClasses(settings), ct);
 
         if (classes.Count == 0)
@@ -327,7 +329,7 @@ public class SyncService
             return new UpsertLookupResponse();
         }
 
-        var response = await _api.UpsertClassesAsync(new UpsertLookupRequest
+        var response = await _api.UpsertClassesAsync(date, new UpsertLookupRequest
         {
             Source = settings.DeviceName,
             LastModifiedUtc = DateTimeOffset.UtcNow,

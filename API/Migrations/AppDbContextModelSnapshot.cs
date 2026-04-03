@@ -43,18 +43,20 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
 
         modelBuilder.Entity("StartRef.Api.Data.Entities.Class", b =>
         {
+            b.Property<DateOnly>("CompetitionDate").HasColumnType("date");
             b.Property<int>("Id").HasColumnType("int").ValueGeneratedNever();
             b.Property<string>("Name").IsRequired().HasMaxLength(200).HasColumnType("nvarchar(200)").HasDefaultValue("");
             b.Property<int>("StartPlace").HasColumnType("int").HasDefaultValue(0);
-            b.HasKey("Id");
+            b.HasKey("CompetitionDate", "Id");
             b.ToTable("Classes");
         });
 
         modelBuilder.Entity("StartRef.Api.Data.Entities.Club", b =>
         {
+            b.Property<DateOnly>("CompetitionDate").HasColumnType("date");
             b.Property<int>("Id").HasColumnType("int").ValueGeneratedNever();
             b.Property<string>("Name").IsRequired().HasMaxLength(200).HasColumnType("nvarchar(200)").HasDefaultValue("");
-            b.HasKey("Id");
+            b.HasKey("CompetitionDate", "Id");
             b.ToTable("Clubs");
         });
 

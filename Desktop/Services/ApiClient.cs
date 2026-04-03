@@ -92,10 +92,11 @@ public class ApiClient
     }
 
     public async Task<UpsertLookupResponse?> UpsertClassesAsync(
+        string date,
         UpsertLookupRequest request,
         CancellationToken ct = default)
     {
-        var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/lookups/classes";
+        var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/lookups/{date}/classes";
         var msg = new HttpRequestMessage(HttpMethod.Put, url)
         {
             Content = JsonContent.Create(request)
@@ -119,10 +120,11 @@ public class ApiClient
     }
 
     public async Task<UpsertLookupResponse?> UpsertClubsAsync(
+        string date,
         UpsertLookupRequest request,
         CancellationToken ct = default)
     {
-        var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/lookups/clubs";
+        var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/lookups/{date}/clubs";
         var msg = new HttpRequestMessage(HttpMethod.Put, url)
         {
             Content = JsonContent.Create(request)

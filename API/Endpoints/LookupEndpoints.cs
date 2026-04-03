@@ -9,20 +9,28 @@ public static class LookupEndpoints
 {
     public static void MapLookupEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/lookups/classes", async (AppDbContext db) =>
+        app.MapGet("/api/lookups/{date}/classes", async (string date, AppDbContext db) =>
         {
+            if (!DateOnly.TryParse(date, out var competitionDate))
+                return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
+
             var items = await db.Classes
                 .AsNoTracking()
+                .Where(x => x.CompetitionDate == competitionDate)
                 .OrderBy(x => x.Name)
                 .Select(x => new LookupItemRequest(x.Id, x.Name, x.StartPlace))
                 .ToListAsync();
             return Results.Ok(items);
         });
 
-        app.MapGet("/api/lookups/clubs", async (AppDbContext db) =>
+        app.MapGet("/api/lookups/{date}/clubs", async (string date, AppDbContext db) =>
         {
+            if (!DateOnly.TryParse(date, out var competitionDate))
+                return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
+
             var items = await db.Clubs
                 .AsNoTracking()
+                .Where(x => x.CompetitionDate == competitionDate)
                 .OrderBy(x => x.Name)
                 .Select(x => new LookupItemRequest(x.Id, x.Name, 0))
                 .ToListAsync();
@@ -47,14 +55,23 @@ public static class LookupEndpoints
                 .AsNoTracking()
                 .Where(r => r.CompetitionDate == competitionDate)
                 .CountAsync();
-            var clubs = await db.Clubs.CountAsync();
-            var classes = await db.Classes.CountAsync();
+            var clubs = await db.Clubs
+                .AsNoTracking()
+                .Where(c => c.CompetitionDate == competitionDate)
+                .CountAsync();
+            var classes = await db.Classes
+                .AsNoTracking()
+                .Where(c => c.CompetitionDate == competitionDate)
+                .CountAsync();
 
             return Results.Ok(new LookupCountsResponse(competitors, clubs, classes));
         });
 
-        app.MapPut("/api/lookups/classes", async (UpsertLookupRequest request, AppDbContext db) =>
+        app.MapPut("/api/lookups/{date}/classes", async (string date, UpsertLookupRequest request, AppDbContext db) =>
         {
+            if (!DateOnly.TryParse(date, out var competitionDate))
+                return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
+
             if (request.Items is null || request.Items.Count == 0)
                 return Results.BadRequest(new { error = "Items list cannot be empty." });
 
@@ -70,7 +87,7 @@ public static class LookupEndpoints
 
             var ids = normalized.Select(x => x.Id).ToList();
             var existing = await db.Classes
-                .Where(x => ids.Contains(x.Id))
+                .Where(x => x.CompetitionDate == competitionDate && ids.Contains(x.Id))
                 .ToDictionaryAsync(x => x.Id);
 
             int inserted = 0, updated = 0, unchanged = 0;
@@ -93,6 +110,7 @@ public static class LookupEndpoints
                 {
                     db.Classes.Add(new Class
                     {
+                        CompetitionDate = competitionDate,
                         Id = item.Id,
                         Name = item.Name,
                         StartPlace = item.StartPlace
@@ -105,8 +123,11 @@ public static class LookupEndpoints
             return Results.Ok(new UpsertLookupResponse(inserted, updated, unchanged));
         });
 
-        app.MapPut("/api/lookups/clubs", async (UpsertLookupRequest request, AppDbContext db) =>
+        app.MapPut("/api/lookups/{date}/clubs", async (string date, UpsertLookupRequest request, AppDbContext db) =>
         {
+            if (!DateOnly.TryParse(date, out var competitionDate))
+                return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
+
             if (request.Items is null || request.Items.Count == 0)
                 return Results.BadRequest(new { error = "Items list cannot be empty." });
 
@@ -122,7 +143,7 @@ public static class LookupEndpoints
 
             var ids = normalized.Select(x => x.Id).ToList();
             var existing = await db.Clubs
-                .Where(x => ids.Contains(x.Id))
+                .Where(x => x.CompetitionDate == competitionDate && ids.Contains(x.Id))
                 .ToDictionaryAsync(x => x.Id);
 
             int inserted = 0, updated = 0, unchanged = 0;
@@ -144,6 +165,7 @@ public static class LookupEndpoints
                 {
                     db.Clubs.Add(new Club
                     {
+                        CompetitionDate = competitionDate,
                         Id = item.Id,
                         Name = item.Name
                     });

@@ -151,7 +151,7 @@ class ApiClient(
 
         try {
             val request = Request.Builder()
-                .url("$baseUrl/api/lookups/classes")
+                .url("$baseUrl/api/lookups/${settings.competitionDate}/classes")
                 .addHeader("X-Api-Key", apiKey)
                 .get()
                 .build()
@@ -182,7 +182,7 @@ class ApiClient(
 
         try {
             val request = Request.Builder()
-                .url("$baseUrl/api/lookups/clubs")
+                .url("$baseUrl/api/lookups/${settings.competitionDate}/clubs")
                 .addHeader("X-Api-Key", apiKey)
                 .get()
                 .build()

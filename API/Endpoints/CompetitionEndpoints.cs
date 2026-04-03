@@ -44,8 +44,13 @@ public static class CompetitionEndpoints
             .Where(c => c.Date == competitionDate)
             .ExecuteDeleteAsync();
 
-        var deletedClasses = await db.Classes.ExecuteDeleteAsync();
-        var deletedClubs = await db.Clubs.ExecuteDeleteAsync();
+        var deletedClasses = await db.Classes
+            .Where(c => c.CompetitionDate == competitionDate)
+            .ExecuteDeleteAsync();
+
+        var deletedClubs = await db.Clubs
+            .Where(c => c.CompetitionDate == competitionDate)
+            .ExecuteDeleteAsync();
 
         return Results.Ok(new
         {
