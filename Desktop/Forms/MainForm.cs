@@ -45,6 +45,7 @@ public partial class MainForm : Form
         _syncService = new SyncService(_api, dbIsamRepository, () => _settings, AppendLog);
         _syncService.AutoSyncStarted += SyncService_AutoSyncStarted;
         _syncService.AutoSyncFinished += SyncService_AutoSyncFinished;
+        _syncService.AutoPushCompleted += SyncService_AutoPushCompleted;
         _pushActionsEnabled = false;
 
         LoadSettingsToUi();   // sets chkAutoSync, which fires Start() if enabled
@@ -96,6 +97,8 @@ public partial class MainForm : Form
         chkAutoSync.Checked = _settings.AutoSyncEnabled;
         btnFailureSound.Text = _settings.FailureSoundEnabled ? "🔊" : "🔇";
         nudInterval.Value = _settings.SyncIntervalSeconds;
+        nudAutoPushInterval.Value = Math.Max(10, Math.Min(3600, _settings.AutoPushIntervalSeconds));
+        chkAutoPush.Checked = _settings.AutoPushEnabled;
         UpdateLastSyncLabel();
     }
 
@@ -615,6 +618,7 @@ public partial class MainForm : Form
         DbBridgeService.SetCodePage(_settings.DbCodePage);
         _settings.Save();
         _syncService.UpdateInterval(_settings.SyncIntervalSeconds);
+        _syncService.UpdateAutoPushInterval(_settings.AutoPushIntervalSeconds);
         LoadSettingsToUi();
     }
 
@@ -864,6 +868,40 @@ public partial class MainForm : Form
         _settings.SyncIntervalSeconds = (int)nudInterval.Value;
         _settings.Save();
         _syncService.UpdateInterval(_settings.SyncIntervalSeconds);
+    }
+
+    private void chkAutoPush_CheckedChanged(object sender, EventArgs e)
+    {
+        _settings.AutoPushEnabled = chkAutoPush.Checked;
+        _settings.Save();
+        if (_settings.AutoPushEnabled)
+        {
+            if (!EnsureDbAvailableForPush("Auto-push"))
+            {
+                _settings.AutoPushEnabled = false;
+                _settings.Save();
+                chkAutoPush.Checked = false;
+                return;
+            }
+            _syncService.StartAutoPush(_settings.AutoPushIntervalSeconds);
+        }
+        else
+        {
+            _syncService.StopAutoPush();
+        }
+    }
+
+    private void nudAutoPushInterval_ValueChanged(object sender, EventArgs e)
+    {
+        _settings.AutoPushIntervalSeconds = (int)nudAutoPushInterval.Value;
+        _settings.Save();
+        _syncService.UpdateAutoPushInterval(_settings.AutoPushIntervalSeconds);
+    }
+
+    private void SyncService_AutoPushCompleted(DateTimeOffset completedAt)
+    {
+        if (InvokeRequired) { Invoke(() => SyncService_AutoPushCompleted(completedAt)); return; }
+        lblLastAutoPush.Text = completedAt.ToLocalTime().ToString("HH:mm:ss");
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)

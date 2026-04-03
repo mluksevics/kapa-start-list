@@ -23,6 +23,9 @@ partial class MainForm
     private Label lblLastSyncCaption, lblLastSync;
     private CheckBox chkTestMode;
     private Button btnSyncNow, btnForcePush, btnForcePushRange, btnUploadNewRunners, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnDeleteTodayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, btnAdvancedToggle;
+    private CheckBox chkAutoPush;
+    private NumericUpDown nudAutoPushInterval;
+    private Label lblAutoPushIntervalCaption, lblAutoPushIntervalUnit, lblLastAutoPushCaption, lblLastAutoPush;
     private Panel panelAdvancedContent;
     private FlowLayoutPanel flowAdvanced;
     private Label lblStatus;
@@ -150,6 +153,31 @@ partial class MainForm
             AutoSize = true
         };
         chkTestMode.CheckedChanged += chkTestMode_CheckedChanged;
+        y += 32;
+
+        // ── Auto-push row ─────────────────────────────────────────────────────
+        chkAutoPush = new CheckBox
+        {
+            Text = "Auto-push enabled",
+            Location = new System.Drawing.Point(10, y),
+            AutoSize = true
+        };
+        chkAutoPush.CheckedChanged += chkAutoPush_CheckedChanged;
+
+        lblAutoPushIntervalCaption = MakeLabel("Interval:", 200, y, 55);
+        nudAutoPushInterval = new NumericUpDown
+        {
+            Minimum = 10,
+            Maximum = 3600,
+            Value = 60,
+            Width = 60,
+            Location = new System.Drawing.Point(258, y)
+        };
+        nudAutoPushInterval.ValueChanged += nudAutoPushInterval_ValueChanged;
+        lblAutoPushIntervalUnit = MakeLabel("s", 322, y, 20);
+
+        lblLastAutoPushCaption = MakeLabel("Last push:", 360, y, 65);
+        lblLastAutoPush = MakeLabel("Never", 428, y, 100);
         y += 32;
 
         // Separator
@@ -327,6 +355,8 @@ partial class MainForm
             lblStageCaption, cmbDay, lblDbDateCaption, dtpDbDate, lblDayNote, lblDbDateWarning,
             chkAutoSync, lblIntervalCaption, nudInterval, lblIntervalUnit,
             lblLastSyncCaption, lblLastSync, chkTestMode,
+            chkAutoPush, lblAutoPushIntervalCaption, nudAutoPushInterval, lblAutoPushIntervalUnit,
+            lblLastAutoPushCaption, lblLastAutoPush,
             sep,
             btnSyncNow, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnPeekWebApi,
             btnAdvancedToggle, panelAdvancedContent,

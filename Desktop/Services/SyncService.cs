@@ -20,8 +20,15 @@ public class SyncService
     private CancellationTokenSource? _autoSyncCts;
     private int _autoSyncInProgress;
 
+    private System.Windows.Forms.Timer? _autoPushTimer;
+    private CancellationTokenSource? _autoPushCts;
+    private int _autoPushInProgress;
+
     public event Action? AutoSyncStarted;
     public event Action? AutoSyncFinished;
+
+    /// <summary>Raised on the thread pool when an auto-push cycle completes (success or error).</summary>
+    public event Action<DateTimeOffset>? AutoPushCompleted;
 
     public SyncService(
         ApiClient api,
@@ -55,6 +62,31 @@ public class SyncService
     }
 
     public void Stop() => _timer?.Stop();
+
+    public void StartAutoPush(int intervalSeconds)
+    {
+        _autoPushTimer?.Stop();
+        _autoPushTimer?.Dispose();
+        _autoPushTimer = new System.Windows.Forms.Timer { Interval = Math.Max(10, intervalSeconds) * 1000 };
+        _autoPushTimer.Tick += async (_, _) =>
+        {
+            _ = Task.Run(RunAutoPushTickAsync);
+            await Task.CompletedTask;
+        };
+        _autoPushTimer.Start();
+    }
+
+    public void StopAutoPush()
+    {
+        _autoPushTimer?.Stop();
+        _autoPushCts?.Cancel();
+    }
+
+    public void UpdateAutoPushInterval(int seconds)
+    {
+        if (_autoPushTimer is null) return;
+        _autoPushTimer.Interval = Math.Max(10, seconds) * 1000;
+    }
 
     public void CancelAutoSync()
     {
@@ -353,6 +385,34 @@ public class SyncService
         if (DateOnly.TryParse(settings.CompetitionDate, out configuredDate))
             return configuredDate;
         return DateOnly.FromDateTime(DateTime.Today);
+    }
+
+    private async Task RunAutoPushTickAsync()
+    {
+        if (Interlocked.CompareExchange(ref _autoPushInProgress, 1, 0) != 0) return;
+        // Skip if auto-pull is running to avoid concurrent DBISAM access.
+        if (_autoSyncInProgress == 1) { Interlocked.Exchange(ref _autoPushInProgress, 0); return; }
+        _autoPushCts = new CancellationTokenSource();
+        try
+        {
+            _log($"{Ts()} Auto-push started.");
+            await PushAllChangesAsync(_autoPushCts.Token);
+            AutoPushCompleted?.Invoke(DateTimeOffset.UtcNow);
+        }
+        catch (OperationCanceledException)
+        {
+            _log($"{Ts()} Auto-push cancelled.");
+        }
+        catch (Exception ex)
+        {
+            _log($"{Ts()} Auto-push error: {ex.Message}");
+        }
+        finally
+        {
+            _autoPushCts.Dispose();
+            _autoPushCts = null;
+            Interlocked.Exchange(ref _autoPushInProgress, 0);
+        }
     }
 
     private async Task RunAutoSyncTickAsync()
