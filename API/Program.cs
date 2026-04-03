@@ -25,6 +25,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
                 maxRetryCount: 10,
                 maxRetryDelay: TimeSpan.FromSeconds(30),
                 errorNumbersToAdd: new[] { SqlDatabaseNotCurrentlyAvailable });
+            sqlOptions.MaxBatchSize(1000);
         }));
 
 builder.Services.AddRequestDecompression();

@@ -89,6 +89,7 @@ public static class RunnerEndpoints
                 return Results.BadRequest(new { error = "Runners list cannot be empty." });
 
             var utcNow = DateTimeOffset.UtcNow;
+            db.ChangeTracker.AutoDetectChangesEnabled = false;
 
             // Auto-create competition if not exists
             var competition = await db.Competitions.FindAsync(competitionDate);
@@ -168,6 +169,7 @@ public static class RunnerEndpoints
 
             int inserted = 0, updated = 0, unchanged = 0, skippedAsOlder = 0;
             var changeLogEntries = new List<ChangeLogEntry>();
+            var newRunners = new List<Runner>();
 
             foreach (var dto in request.Runners)
             {
@@ -326,7 +328,7 @@ public static class RunnerEndpoints
                         LastModifiedUtc = utcNow,
                         LastModifiedBy = request.Source
                     };
-                    db.Runners.Add(runner);
+                    newRunners.Add(runner);
 
                     changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Name", null, dto.Name, utcNow, request.Source));
                     changeLogEntries.Add(MakeLog(competitionDate, dto.StartNumber, "Surname", null, dto.Surname, utcNow, request.Source));
@@ -342,6 +344,9 @@ public static class RunnerEndpoints
                     inserted++;
                 }
             }
+
+            if (newRunners.Count > 0)
+                db.Runners.AddRange(newRunners);
 
             if (changeLogEntries.Count > 0)
                 db.ChangeLogEntries.AddRange(changeLogEntries);
