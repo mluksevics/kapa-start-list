@@ -7,10 +7,10 @@ public class AppSettings
     public string ApiBaseUrl { get; set; } = "https://startref.azurewebsites.net/";
     public string ApiKey { get; set; } = "marcisTestKey";
     public string DbIsamPath { get; set; } = "";
-    public int SyncIntervalSeconds { get; set; } = 60;
+    public int SyncIntervalSeconds { get; set; } = 30;
     public bool AutoSyncEnabled { get; set; } = true;
     public bool AutoPushEnabled { get; set; } = false;
-    public int AutoPushIntervalSeconds { get; set; } = 60;
+    public int AutoPushIntervalSeconds { get; set; } = 600;
     public bool FailureSoundEnabled { get; set; } = true;
     public string DeviceName { get; set; } = "desktop";
     public int DayNo { get; set; } = 1;

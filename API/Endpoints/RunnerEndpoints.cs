@@ -100,38 +100,66 @@ public static class RunnerEndpoints
                 competitionCreated = true;
             }
 
-            // Upsert Classes and Clubs from incoming data
-            var incomingClasses = request.Runners
+            // Upsert Classes — single batch query instead of per-item FindAsync
+            var incomingClassGroups = request.Runners
                 .Where(r => r.ClassId > 0 && !string.IsNullOrEmpty(r.ClassName))
                 .GroupBy(r => r.ClassId)
-                .Select(g => new Class { CompetitionDate = competitionDate, Id = g.Key, Name = g.First().ClassName, StartPlace = 0 });
+                .Select(g => new { Id = g.Key, Name = g.First().ClassName })
+                .ToList();
 
-            foreach (var cls in incomingClasses)
+            if (incomingClassGroups.Count > 0)
             {
-                var existing = await db.Classes.FindAsync(competitionDate, cls.Id);
-                if (existing is null)
-                    db.Classes.Add(cls);
-                else if (existing.Name != cls.Name)
-                    existing.Name = cls.Name;
+                var classIds = incomingClassGroups.Select(c => c.Id).ToList();
+                var existingClasses = await db.Classes
+                    .Where(c => c.CompetitionDate == competitionDate && classIds.Contains(c.Id))
+                    .ToDictionaryAsync(c => c.Id);
+
+                foreach (var cls in incomingClassGroups)
+                {
+                    if (existingClasses.TryGetValue(cls.Id, out var existing))
+                    {
+                        if (existing.Name != cls.Name)
+                            existing.Name = cls.Name;
+                    }
+                    else
+                    {
+                        db.Classes.Add(new Class { CompetitionDate = competitionDate, Id = cls.Id, Name = cls.Name, StartPlace = 0 });
+                    }
+                }
             }
 
-            var incomingClubs = request.Runners
+            // Upsert Clubs — single batch query
+            var incomingClubGroups = request.Runners
                 .Where(r => r.ClubId > 0 && !string.IsNullOrEmpty(r.ClubName))
                 .GroupBy(r => r.ClubId)
-                .Select(g => new Club { CompetitionDate = competitionDate, Id = g.Key, Name = g.First().ClubName });
+                .Select(g => new { Id = g.Key, Name = g.First().ClubName })
+                .ToList();
 
-            foreach (var club in incomingClubs)
+            if (incomingClubGroups.Count > 0)
             {
-                var existing = await db.Clubs.FindAsync(competitionDate, club.Id);
-                if (existing is null)
-                    db.Clubs.Add(club);
-                else if (existing.Name != club.Name)
-                    existing.Name = club.Name;
+                var clubIds = incomingClubGroups.Select(c => c.Id).ToList();
+                var existingClubs = await db.Clubs
+                    .Where(c => c.CompetitionDate == competitionDate && clubIds.Contains(c.Id))
+                    .ToDictionaryAsync(c => c.Id);
+
+                foreach (var club in incomingClubGroups)
+                {
+                    if (existingClubs.TryGetValue(club.Id, out var existing))
+                    {
+                        if (existing.Name != club.Name)
+                            existing.Name = club.Name;
+                    }
+                    else
+                    {
+                        db.Clubs.Add(new Club { CompetitionDate = competitionDate, Id = club.Id, Name = club.Name });
+                    }
+                }
             }
 
-            // Load all existing runners for this date in one query
+            // Load only the runners we need (by incoming start numbers) instead of the entire table
+            var incomingStartNumbers = request.Runners.Select(r => r.StartNumber).ToList();
             var existingRunners = await db.Runners
-                .Where(r => r.CompetitionDate == competitionDate)
+                .Where(r => r.CompetitionDate == competitionDate && incomingStartNumbers.Contains(r.StartNumber))
                 .ToDictionaryAsync(r => r.StartNumber);
 
             int inserted = 0, updated = 0, unchanged = 0, skippedAsOlder = 0;
