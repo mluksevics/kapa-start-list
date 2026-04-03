@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,14 +49,10 @@ fun RunnerRow(
 
     fun hl(field: String) = highlightFields.contains(field)
 
-    val hlColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+    val hlColor = Color(0xFF64B5F6) // light blue
     val rowModifier = Modifier
         .fillMaxWidth()
         .background(bg)
-        .then(
-            if (hl("StartTime")) Modifier.background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f))
-            else Modifier
-        )
         .padding(vertical = 4.dp)
 
     Row(
@@ -67,7 +62,6 @@ fun RunnerRow(
         Box(
             modifier = Modifier
                 .size(52.dp)
-                .then(if (hl("StatusId")) Modifier.background(hlColor) else Modifier)
                 .combinedClickable(
                     onClick = onCheckIn,
                     onLongClick = onDns
@@ -84,18 +78,16 @@ fun RunnerRow(
             text = "${runner.startNumber}",
             fontSize = fontSize,
             fontWeight = if (hl("StartPlace")) FontWeight.Bold else FontWeight.Normal,
-            modifier = Modifier
-                .width(56.dp)
-                .then(if (hl("StartPlace")) Modifier.background(hlColor) else Modifier)
+            color = if (hl("StartPlace")) hlColor else Color.Unspecified,
+            modifier = Modifier.width(56.dp)
         )
 
         Text(
             text = runner.className,
             fontSize = fontSize,
             fontWeight = if (hl("ClassId")) FontWeight.Bold else FontWeight.Normal,
-            modifier = Modifier
-                .width(90.dp)
-                .then(if (hl("ClassId")) Modifier.background(hlColor) else Modifier),
+            color = if (hl("ClassId")) hlColor else Color.Unspecified,
+            modifier = Modifier.width(90.dp),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -104,9 +96,9 @@ fun RunnerRow(
             text = runner.siCard,
             fontSize = fontSize,
             fontWeight = if (hl("SiChipNo")) FontWeight.Bold else FontWeight.Normal,
+            color = if (hl("SiChipNo")) hlColor else Color.Unspecified,
             modifier = Modifier
                 .width(96.dp)
-                .then(if (hl("SiChipNo")) Modifier.background(hlColor) else Modifier)
                 .clickable(onClick = onChipClick),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -117,9 +109,8 @@ fun RunnerRow(
             text = "${runner.name} ${runner.surname}",
             fontSize = fontSize,
             fontWeight = if (nameHl) FontWeight.Bold else FontWeight.Normal,
-            modifier = Modifier
-                .weight(1f)
-                .then(if (nameHl) Modifier.background(hlColor) else Modifier),
+            color = if (nameHl) hlColor else Color.Unspecified,
+            modifier = Modifier.weight(1f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -128,9 +119,8 @@ fun RunnerRow(
             text = runner.clubName,
             fontSize = fontSize,
             fontWeight = if (hl("ClubId")) FontWeight.Bold else FontWeight.Normal,
-            modifier = Modifier
-                .width(100.dp)
-                .then(if (hl("ClubId")) Modifier.background(hlColor) else Modifier),
+            color = if (hl("ClubId")) hlColor else Color.Unspecified,
+            modifier = Modifier.width(100.dp),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

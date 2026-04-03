@@ -28,7 +28,8 @@ public partial class MainForm : Form
     public MainForm()
     {
         InitializeComponent();
-        try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+        using var iconStream = typeof(MainForm).Assembly.GetManifestResourceStream("StartRef.Desktop.Assets.orienteering.ico");
+        if (iconStream != null) Icon = new Icon(iconStream);
 
         var appVersion = (typeof(MainForm).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
@@ -455,10 +456,10 @@ public partial class MainForm : Form
         try
         {
             AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All initiated.");
-            AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All step 1/2: running sync.");
-            await Task.Run(() => _syncService.RunCycleAsync(cts.Token), cts.Token);
-            AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All step 2/2: running force push.");
+            AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All step 1/2: running force push.");
             await Task.Run(() => _syncService.ForcePushAllAsync(cts.Token), cts.Token);
+            AppendLog($"{DateTime.Now:HH:mm:ss} Force Push All step 2/2: running sync.");
+            await Task.Run(() => _syncService.RunCycleAsync(cts.Token), cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -496,10 +497,10 @@ public partial class MainForm : Form
         UpdateStatusLabel("Push selected...");
         try
         {
-            AppendLog($"{DateTime.Now:HH:mm:ss} Push selected ({lo}–{hi}) step 1/2: running sync.");
-            await Task.Run(() => _syncService.RunCycleAsync(cts.Token), cts.Token);
-            AppendLog($"{DateTime.Now:HH:mm:ss} Push selected ({lo}–{hi}) step 2/2: uploading range.");
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push selected ({lo}–{hi}) step 1/2: uploading range.");
             await Task.Run(() => _syncService.ForcePushSelectedAsync(fromNr, toNr, cts.Token), cts.Token);
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push selected ({lo}–{hi}) step 2/2: running sync.");
+            await Task.Run(() => _syncService.RunCycleAsync(cts.Token), cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -521,10 +522,10 @@ public partial class MainForm : Form
         UpdateStatusLabel("Push all changes...");
         try
         {
-            AppendLog($"{DateTime.Now:HH:mm:ss} Push all changes step 1/2: running sync.");
-            await Task.Run(() => _syncService.RunCycleAsync(cts.Token), cts.Token);
-            AppendLog($"{DateTime.Now:HH:mm:ss} Push all changes step 2/2: uploading.");
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push all changes step 1/2: uploading.");
             await Task.Run(() => _syncService.PushAllChangesAsync(cts.Token), cts.Token);
+            AppendLog($"{DateTime.Now:HH:mm:ss} Push all changes step 2/2: running sync.");
+            await Task.Run(() => _syncService.RunCycleAsync(cts.Token), cts.Token);
             lblLastAutoPush.Text = DateTime.Now.ToString("HH:mm:ss");
         }
         catch (OperationCanceledException)

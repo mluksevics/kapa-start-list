@@ -265,8 +265,6 @@ public class DbIsamRepository
                 // The DLL stores Start1 as centiseconds relative to Nullzeit; negative offsets are rejected.
                 var (etapResult, etapInfo) = db.GetEtapInfo(settings.DayNo);
                 double? nullzeitSeconds = etapResult.Success ? etapInfo!.Nullzeit / 100.0 : null;
-                if (nullzeitSeconds.HasValue)
-                    _log($"{Ts()} Nullzeit for day {settings.DayNo}: {etapInfo!.NullzeitFormatted} ({etapInfo.Nullzeit} cs)");
 
                 foreach (var r in startTimeUpdates)
                 {
@@ -299,14 +297,13 @@ public class DbIsamRepository
                         var res = db.SetDNSByStartNr(settings.DayNo, r.StartNumber);
                         _log($"{Ts()} DBISAM DNS set #{r.StartNumber}: {(res.Success ? "OK" : $"ERROR {res.Message}")}");
                     }
-                    else if (r.StatusId == 1 && HintIncludes(r, "StatusId"))
+                    else if (r.StatusId is 1 or 2 && HintIncludes(r, "StatusId"))
                     {
-                        // Only clear DNS if runner currently has DNS status in DBISAM.
-                        // Do not touch DNF/MP/DQ (NCKen 2/3/4) or already-OK (NCKen 0).
+                        // Do not touch DNF/MP/DQ (NCKen 2/3/4). Always attempt clear for DNS (1), already-OK (0), or unknown (-1).
                         var snapshot = GetSnapshot(db, snapshots, settings.DayNo, r.StartNumber);
-                        if (snapshot is not null && snapshot.NcKen != 1)
+                        if (snapshot is not null && snapshot.NcKen is 2 or 3 or 4)
                         {
-                            _log($"{Ts()} DBISAM DNS clear #{r.StartNumber}: SKIP — current NCKen={snapshot.NcKen} (not DNS)");
+                            _log($"{Ts()} DBISAM DNS clear #{r.StartNumber}: SKIP — current NCKen={snapshot.NcKen} (DNF/MP/DQ, not touching)");
                             continue;
                         }
                         var res = db.ClearDNSByStartNr(settings.DayNo, r.StartNumber);
@@ -395,7 +392,9 @@ public class DbIsamRepository
         var clubName = GetField(fields, "Klubs");
         int clubId = int.TryParse(GetField(fields, "ClubNr"), out var clubNr) ? clubNr : 0;
         int classId = int.TryParse(GetField(fields, "KatNr"), out var katNr) ? katNr : 0;
-        int ncKen = int.TryParse(GetField(fields, $"NCKen{dayNo}"), out var nc) ? nc : -1;
+        var ncKenRaw = GetField(fields, $"NCKen{dayNo}");
+        if (string.IsNullOrEmpty(ncKenRaw)) ncKenRaw = GetField(fields, "NCKen");
+        int ncKen = int.TryParse(ncKenRaw, out var nc) ? nc : -1;
 
         var snapshot = new DbRunnerSnapshot(chip, classId, start, name, surname, clubId, clubName, ncKen);
         cache[key] = snapshot;

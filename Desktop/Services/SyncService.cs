@@ -218,8 +218,18 @@ public class SyncService
         ct.ThrowIfCancellationRequested();
         var settings = _getSettings();
         var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
-        _log($"{Ts()} Push Updates: loading DBISAM...");
 
+        _log($"{Ts()} Push Updates: loading API state...");
+        var apiResponse = await _api.GetRunnersAsync(date, changedSince: null, ct, excludeOwnDevice: false);
+        if (apiResponse is null)
+        {
+            _log($"{Ts()} Push Updates: failed to read API (check URL/key).");
+            return;
+        }
+        var apiByStart = apiResponse.Runners.ToDictionary(r => r.StartNumber);
+        _log($"{Ts()} Push Updates: API has {apiResponse.Runners.Count} runner(s).");
+
+        _log($"{Ts()} Push Updates: loading DBISAM...");
         var runners = await Task.Run(() => _dbIsamRepository.GetAllRunnersByDay(settings, ct), ct);
         var meaningful = runners.Where(r => HasIsamParticipantData(r)).ToList();
         _log($"{Ts()} Push Updates: DBISAM loaded {runners.Count} total, {meaningful.Count} eligible.");
@@ -230,12 +240,32 @@ public class SyncService
         }
 
         var now = DateTimeOffset.UtcNow;
-        foreach (var r in meaningful)
-            r.LastModifiedUtc = now;
+        var toUpload = new List<BulkRunnerDto>();
+        foreach (var db in meaningful)
+        {
+            db.LastModifiedUtc = now;
+            apiByStart.TryGetValue(db.StartNumber, out var api);
+            if (api is null)
+            {
+                toUpload.Add(db);
+            }
+            else if (IsamRowDiffersFromApi(db, api))
+            {
+                var diffs = DescribeDiffs(db, api);
+                _log($"{Ts()} Push Updates: #{db.StartNumber} {db.Surname} {db.Name} — {diffs}");
+                toUpload.Add(db);
+            }
+        }
+
+        if (toUpload.Count == 0)
+        {
+            _log($"{Ts()} Push Updates: nothing to push (all in sync).");
+            return;
+        }
 
         int totalInserted = 0, totalUpdated = 0, totalUnchanged = 0;
-        var chunks = meaningful.Chunk(500).ToList();
-        _log($"{Ts()} Push Updates: uploading {meaningful.Count} runner(s) in {chunks.Count} chunk(s)...");
+        var chunks = toUpload.Chunk(500).ToList();
+        _log($"{Ts()} Push Updates: uploading {toUpload.Count} runner(s) in {chunks.Count} chunk(s)...");
 
         for (int i = 0; i < chunks.Count; i++)
         {
@@ -260,6 +290,24 @@ public class SyncService
         }
 
         _log($"{Ts()} Push Updates: all done — inserted={totalInserted} updated={totalUpdated} unchanged={totalUnchanged}");
+    }
+
+    private static string DescribeDiffs(BulkRunnerDto db, RunnerDto api)
+    {
+        var parts = new List<string>();
+        if (!string.Equals(NormTxt(db.Name), NormTxt(api.Name), StringComparison.Ordinal))
+            parts.Add($"Name: '{api.Name}'→'{db.Name}'");
+        if (!string.Equals(NormTxt(db.Surname), NormTxt(api.Surname), StringComparison.Ordinal))
+            parts.Add($"Surname: '{api.Surname}'→'{db.Surname}'");
+        if (!StringEqualNorm(db.SiChipNo, api.SiChipNo))
+            parts.Add($"Chip: '{api.SiChipNo}'→'{db.SiChipNo}'");
+        if (db.ClassId != api.ClassId)
+            parts.Add($"Class: {api.ClassId}→{db.ClassId}");
+        if (db.ClubId != api.ClubId)
+            parts.Add($"Club: {api.ClubId}→{db.ClubId}");
+        if (!string.Equals(NormStartTime(db.StartTime), NormStartTime(api.StartTime), StringComparison.Ordinal))
+            parts.Add($"StartTime: '{api.StartTime}'→'{db.StartTime}'");
+        return parts.Count > 0 ? string.Join(", ", parts) : "unknown diff";
     }
 
     /// <summary>

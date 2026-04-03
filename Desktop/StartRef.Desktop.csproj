@@ -27,6 +27,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Assets\orienteering.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="Library\DbBridge.dll">
       <Link>DbBridge.dll</Link>
       <TargetPath>DbBridge.dll</TargetPath>

@@ -52,7 +52,8 @@ public class ApiClient
     public async Task<GetRunnersResponse?> GetRunnersAsync(
         string date,
         DateTimeOffset? changedSince = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        bool excludeOwnDevice = true)
     {
         var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/competitions/{date}/runners";
         var sep = '?';
@@ -61,7 +62,8 @@ public class ApiClient
             url += $"?changedSince={Uri.EscapeDataString(changedSince.Value.ToString("O"))}";
             sep = '&';
         }
-        url += $"{sep}excludeSource={Uri.EscapeDataString(S.DeviceName)}";
+        if (excludeOwnDevice)
+            url += $"{sep}excludeSource={Uri.EscapeDataString(S.DeviceName)}";
 
         return await GetRunnersRawAsync(url, ct);
     }

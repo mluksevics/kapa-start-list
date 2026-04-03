@@ -108,10 +108,10 @@ public class DbBridgeService : IDisposable
     private string GetLastError()
     {
         if (!IsOpen) return string.Empty;
-        var sb = new StringBuilder(1024);
-        try { DbBridgeNative.DbGetLastError(_ctx, sb, sb.Capacity); }
+        var buffer = new byte[1024];
+        try { DbBridgeNative.DbGetLastErrorRaw(_ctx, buffer, buffer.Length); }
         catch { /* ignore */ }
-        return sb.ToString();
+        return DecodeBuffer(buffer);
     }
 
     private static Encoding CreateEncoding(int codePage)
@@ -206,12 +206,12 @@ public class DbBridgeService : IDisposable
     public (DbBridgeResult Result, DbEtapInfo? Info) GetEtapInfo(int dayNo)
     {
         if (!IsOpen) return (NotOpen(), null);
-        var nameBuf = new StringBuilder(256);
-        var dateBuf = new StringBuilder(256);
-        int code = DbBridgeNative.DbGetEtapInfo(_ctx, dayNo, nameBuf, nameBuf.Capacity, dateBuf, dateBuf.Capacity, out int nullzeit);
+        var nameBuf = new byte[256];
+        var dateBuf = new byte[256];
+        int code = DbBridgeNative.DbGetEtapInfoRaw(_ctx, dayNo, nameBuf, nameBuf.Length, dateBuf, dateBuf.Length, out int nullzeit);
         var result = Wrap(code, "OK");
         if (!result.Success) return (result, null);
-        return (result, new DbEtapInfo(nameBuf.ToString(), dateBuf.ToString(), nullzeit));
+        return (result, new DbEtapInfo(DecodeBuffer(nameBuf), DecodeBuffer(dateBuf), nullzeit));
     }
 
     // ── Test mode ────────────────────────────────────────────────────────────
@@ -227,28 +227,28 @@ public class DbBridgeService : IDisposable
     public (DbBridgeResult Result, string? Raw) GetTeilnInfoByIdNr(int idNr)
     {
         if (!IsOpen) return (NotOpen(), null);
-        var buf = new StringBuilder(8192);
-        int code = DbBridgeNative.DbGetTeilnInfoByIdNr(_ctx, idNr, buf, buf.Capacity);
+        var buf = new byte[8192];
+        int code = DbBridgeNative.DbGetTeilnInfoByIdNrRaw(_ctx, idNr, buf, buf.Length);
         var result = Wrap(code, "OK");
-        return (result, result.Success ? buf.ToString() : null);
+        return (result, result.Success ? DecodeBuffer(buf) : null);
     }
 
     public (DbBridgeResult Result, string? Raw) GetIdNrListByStartNr(int startNr)
     {
         if (!IsOpen) return (NotOpen(), null);
-        var buf = new StringBuilder(8192);
-        int code = DbBridgeNative.DbGetIdNrListByStartNr(_ctx, startNr, buf, buf.Capacity);
+        var buf = new byte[8192];
+        int code = DbBridgeNative.DbGetIdNrListByStartNrRaw(_ctx, startNr, buf, buf.Length);
         var result = Wrap(code, "OK");
-        return (result, result.Success ? buf.ToString() : null);
+        return (result, result.Success ? DecodeBuffer(buf) : null);
     }
 
     public (DbBridgeResult Result, string? Raw) GetIdNrListByChipNr(int dayNo, int chipNr)
     {
         if (!IsOpen) return (NotOpen(), null);
-        var buf = new StringBuilder(8192);
-        int code = DbBridgeNative.DbGetIdNrListByChipNr(_ctx, dayNo, chipNr, buf, buf.Capacity);
+        var buf = new byte[8192];
+        int code = DbBridgeNative.DbGetIdNrListByChipNrRaw(_ctx, dayNo, chipNr, buf, buf.Length);
         var result = Wrap(code, "OK");
-        return (result, result.Success ? buf.ToString() : null);
+        return (result, result.Success ? DecodeBuffer(buf) : null);
     }
 
     // ── Change StartTime ─────────────────────────────────────────────────────
@@ -295,22 +295,22 @@ public class DbBridgeService : IDisposable
     // DBISAM "Name" = surname; "Vorname" = first name.
 
     public DbBridgeResult ChangeNameByIdNr(int idNr, string newName) =>
-        IsOpen ? Wrap(DbBridgeNative.DbChangeNameByIdNr(_ctx, newName, idNr), "Name updated") : NotOpen();
+        IsOpen ? Wrap(DbBridgeNative.DbChangeNameByIdNrRaw(_ctx, EncodeString(newName), idNr), "Name updated") : NotOpen();
 
     public DbBridgeResult ChangeNameByStartNr(int startNr, string newName) =>
-        IsOpen ? Wrap(DbBridgeNative.DbChangeNameByStartNr(_ctx, newName, startNr), "Name updated") : NotOpen();
+        IsOpen ? Wrap(DbBridgeNative.DbChangeNameByStartNrRaw(_ctx, EncodeString(newName), startNr), "Name updated") : NotOpen();
 
     public DbBridgeResult ChangeVornameByIdNr(int idNr, string newVorname) =>
-        IsOpen ? Wrap(DbBridgeNative.DbChangeVornameByIdNr(_ctx, newVorname, idNr), "Vorname updated") : NotOpen();
+        IsOpen ? Wrap(DbBridgeNative.DbChangeVornameByIdNrRaw(_ctx, EncodeString(newVorname), idNr), "Vorname updated") : NotOpen();
 
     public DbBridgeResult ChangeVornameByStartNr(int startNr, string newVorname) =>
-        IsOpen ? Wrap(DbBridgeNative.DbChangeVornameByStartNr(_ctx, newVorname, startNr), "Vorname updated") : NotOpen();
+        IsOpen ? Wrap(DbBridgeNative.DbChangeVornameByStartNrRaw(_ctx, EncodeString(newVorname), startNr), "Vorname updated") : NotOpen();
 
     public DbBridgeResult ChangeNameVornameByIdNr(int idNr, string newName, string newVorname) =>
-        IsOpen ? Wrap(DbBridgeNative.DbChangeNameVornameByIdNr(_ctx, newName, newVorname, idNr), "Name+Vorname updated") : NotOpen();
+        IsOpen ? Wrap(DbBridgeNative.DbChangeNameVornameByIdNrRaw(_ctx, EncodeString(newName), EncodeString(newVorname), idNr), "Name+Vorname updated") : NotOpen();
 
     public DbBridgeResult ChangeNameVornameByStartNr(int startNr, string newName, string newVorname) =>
-        IsOpen ? Wrap(DbBridgeNative.DbChangeNameVornameByStartNr(_ctx, newName, newVorname, startNr), "Name+Vorname updated") : NotOpen();
+        IsOpen ? Wrap(DbBridgeNative.DbChangeNameVornameByStartNrRaw(_ctx, EncodeString(newName), EncodeString(newVorname), startNr), "Name+Vorname updated") : NotOpen();
 
     // ── DNS (NCKen) ──────────────────────────────────────────────────────────
     // NCKen values: 0=OK, 1=DNS, 2=DNF, 3=MP, 4=DQ.
@@ -367,7 +367,9 @@ public class DbBridgeService : IDisposable
             int actual = dllCall(buf, needed + 1);
             _log?.Invoke($"CSV read: {actual} bytes actual");
             if (actual <= 0) return (Fail(actual), null);
-            return (Ok("OK"), Marshal.PtrToStringAnsi(buf) ?? string.Empty);
+            var bytes = new byte[actual];
+            Marshal.Copy(buf, bytes, 0, actual);
+            return (Ok("OK"), DecodeBuffer(bytes));
         }
         finally
         {

@@ -351,6 +351,7 @@ public static class RunnerEndpoints
             if (changeLogEntries.Count > 0)
                 db.ChangeLogEntries.AddRange(changeLogEntries);
 
+            db.ChangeTracker.DetectChanges();
             await db.SaveChangesAsync();
 
             return Results.Ok(new BulkUploadResponse(

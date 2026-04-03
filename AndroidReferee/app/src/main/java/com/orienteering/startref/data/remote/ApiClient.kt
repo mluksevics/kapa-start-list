@@ -105,7 +105,9 @@ class ApiClient(
         try {
             val url = buildString {
                 append("$baseUrl/api/competitions/$date/runners")
-                if (changedSinceMs != null) append("?changedSince=${toIso(changedSinceMs)}")
+                var sep = '?'
+                if (changedSinceMs != null) { append("${sep}changedSince=${toIso(changedSinceMs)}"); sep = '&' }
+                append("${sep}excludeDevice=${settings.deviceName}")
             }
 
             val request = Request.Builder().url(url).get().build()
