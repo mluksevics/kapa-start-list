@@ -40,7 +40,7 @@ public partial class MainForm : Form
         DbBridgeService.SetCodePage(_settings.DbCodePage);
         _logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "StartRefSync.log");
 
-        _api = new ApiClient(() => _settings);
+        _api = new ApiClient(() => _settings, AppendLog);
         var dbIsamRepository = new DbIsamRepository(AppendLog);
         _syncService = new SyncService(_api, dbIsamRepository, () => _settings, AppendLog);
         _syncService.AutoSyncStarted += SyncService_AutoSyncStarted;
@@ -304,7 +304,7 @@ public partial class MainForm : Form
             btnSyncNow.Enabled = enabled;
             btnForcePush.Enabled = enabled;
             btnForcePushRange.Enabled = enabled;
-            btnUploadNewRunners.Enabled = enabled;
+
             btnPushAllChanges.Enabled = enabled;
             btnPushClubs.Enabled = enabled;
             btnPushClasses.Enabled = enabled;
@@ -358,7 +358,7 @@ public partial class MainForm : Form
         btnSyncNow.Enabled = false;
         btnForcePush.Enabled = false;
         btnForcePushRange.Enabled = false;
-        btnUploadNewRunners.Enabled = false;
+
         btnPushAllChanges.Enabled = false;
         btnPushClubs.Enabled = false;
         btnPushClasses.Enabled = false;
@@ -379,7 +379,7 @@ public partial class MainForm : Form
         btnSyncNow.Enabled = _pushActionsEnabled;
         btnForcePush.Enabled = _pushActionsEnabled;
         btnForcePushRange.Enabled = _pushActionsEnabled;
-        btnUploadNewRunners.Enabled = _pushActionsEnabled;
+
         btnPushAllChanges.Enabled = _pushActionsEnabled;
         btnPushClubs.Enabled = _pushActionsEnabled;
         btnPushClasses.Enabled = _pushActionsEnabled;
@@ -504,29 +504,6 @@ public partial class MainForm : Form
         catch (OperationCanceledException)
         {
             AppendLog($"{DateTime.Now:HH:mm:ss} Push selected cancelled by user.");
-        }
-        finally
-        {
-            EndCancelableCommand();
-            UpdateStatusLabel("Idle");
-        }
-    }
-
-    private async void btnUploadNewRunners_Click(object sender, EventArgs e)
-    {
-        if (!EnsureDbAvailableForPush("Upload new")) return;
-        if (!TryBeginCancelableCommand("Upload new")) return;
-        var cts = _cancelSyncCts;
-        if (cts is null) return;
-        UpdateStatusLabel("Upload new...");
-        try
-        {
-            AppendLog($"{DateTime.Now:HH:mm:ss} Upload new started.");
-            await Task.Run(() => _syncService.UploadNewRunnersFromIsamAsync(cts.Token), cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            AppendLog($"{DateTime.Now:HH:mm:ss} Upload new cancelled.");
         }
         finally
         {
@@ -819,7 +796,7 @@ public partial class MainForm : Form
         btnSyncNow.Enabled = false;
         btnForcePush.Enabled = false;
         btnForcePushRange.Enabled = false;
-        btnUploadNewRunners.Enabled = false;
+
         btnPushAllChanges.Enabled = false;
         btnPushClubs.Enabled = false;
         btnPushClasses.Enabled = false;
@@ -842,7 +819,7 @@ public partial class MainForm : Form
         btnSyncNow.Enabled = _pushActionsEnabled;
         btnForcePush.Enabled = _pushActionsEnabled;
         btnForcePushRange.Enabled = _pushActionsEnabled;
-        btnUploadNewRunners.Enabled = _pushActionsEnabled;
+
         btnPushAllChanges.Enabled = _pushActionsEnabled;
         btnPushClubs.Enabled = _pushActionsEnabled;
         btnPushClasses.Enabled = _pushActionsEnabled;

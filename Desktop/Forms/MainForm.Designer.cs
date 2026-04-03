@@ -22,7 +22,7 @@ partial class MainForm
     private Label lblIntervalUnit;
     private Label lblLastSyncCaption, lblLastSync;
     private CheckBox chkTestMode;
-    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnUploadNewRunners, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnDeleteTodayData, btnResetDayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, btnAdvancedToggle;
+    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnDeleteTodayData, btnResetDayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, btnAdvancedToggle;
     private CheckBox chkAutoPush;
     private NumericUpDown nudAutoPushInterval;
     private Label lblAutoPushIntervalCaption, lblAutoPushIntervalUnit, lblLastAutoPushCaption, lblLastAutoPush;
@@ -205,30 +205,12 @@ partial class MainForm
 
         btnPushAllChanges = new Button
         {
-            Text = "Push all changes",
-            Location = new System.Drawing.Point(xAct, yAct),
-            Size = new System.Drawing.Size(108, btnRowH)
-        };
-        btnPushAllChanges.Click += btnPushAllChanges_Click;
-        tipUi.SetToolTip(btnPushAllChanges, "Sync then push all eligible DBISAM rows; API applies only real diffs");
-        xAct += 108 + 4;
-
-        btnPushClubs = new Button
-        {
-            Text = "Push Clubs",
-            Location = new System.Drawing.Point(xAct, yAct),
-            Size = new System.Drawing.Size(86, btnRowH)
-        };
-        btnPushClubs.Click += btnPushClubs_Click;
-        xAct += 86 + 4;
-
-        btnPushClasses = new Button
-        {
-            Text = "Push Classes",
+            Text = "Push Updates",
             Location = new System.Drawing.Point(xAct, yAct),
             Size = new System.Drawing.Size(94, btnRowH)
         };
-        btnPushClasses.Click += btnPushClasses_Click;
+        btnPushAllChanges.Click += btnPushAllChanges_Click;
+        tipUi.SetToolTip(btnPushAllChanges, "Sync then push all eligible DBISAM rows; API applies only real diffs");
         xAct += 94 + 4;
 
         btnPullPast = new Button
@@ -238,6 +220,16 @@ partial class MainForm
             Size = new System.Drawing.Size(80, btnRowH)
         };
         btnPullPast.Click += btnPullPast_Click;
+        xAct += 80 + 4;
+
+        btnResetDayData = new Button
+        {
+            Text = "Reset Day",
+            Location = new System.Drawing.Point(xAct, yAct),
+            Size = new System.Drawing.Size(80, btnRowH)
+        };
+        btnResetDayData.Click += btnResetDayData_Click;
+        tipUi.SetToolTip(btnResetDayData, "Delete all API data for this date, then re-upload clubs, classes, and all runners from DBISAM");
         xAct += 80 + 4;
 
         btnPeekWebApi = new Button
@@ -300,23 +292,21 @@ partial class MainForm
         };
         btnDeleteTodayData.Click += btnDeleteTodayData_Click;
 
-        btnUploadNewRunners = new Button
+        btnPushClubs = new Button
         {
-            Text = "Upload new",
-            Size = new System.Drawing.Size(110, 30),
+            Text = "Push Clubs",
+            Size = new System.Drawing.Size(86, 30),
             Margin = new Padding(0, 0, 8, 8)
         };
-        btnUploadNewRunners.Click += btnUploadNewRunners_Click;
-        tipUi.SetToolTip(btnUploadNewRunners, "Upload DBISAM runners missing on API or changed vs Registered/DNS (e.g. after MldKen changes)");
+        btnPushClubs.Click += btnPushClubs_Click;
 
-        btnResetDayData = new Button
+        btnPushClasses = new Button
         {
-            Text = "Reset Day",
-            Size = new System.Drawing.Size(88, 30),
+            Text = "Push Classes",
+            Size = new System.Drawing.Size(94, 30),
             Margin = new Padding(0, 0, 8, 8)
         };
-        btnResetDayData.Click += btnResetDayData_Click;
-        tipUi.SetToolTip(btnResetDayData, "Delete all API data for this date, then re-upload clubs, classes, and all runners from DBISAM");
+        btnPushClasses.Click += btnPushClasses_Click;
 
         btnDbExplorer = new Button
         {
@@ -328,9 +318,9 @@ partial class MainForm
 
         flowAdvanced.Controls.Add(btnForcePush);
         flowAdvanced.Controls.Add(btnForcePushRange);
+        flowAdvanced.Controls.Add(btnPushClubs);
+        flowAdvanced.Controls.Add(btnPushClasses);
         flowAdvanced.Controls.Add(btnDeleteTodayData);
-        flowAdvanced.Controls.Add(btnResetDayData);
-        flowAdvanced.Controls.Add(btnUploadNewRunners);
         flowAdvanced.Controls.Add(btnDbExplorer);
 
         int yStatusRow = yAdv + 26 + 8;
@@ -368,7 +358,7 @@ partial class MainForm
             chkAutoPush, lblAutoPushIntervalCaption, nudAutoPushInterval, lblAutoPushIntervalUnit,
             lblLastAutoPushCaption, lblLastAutoPush,
             sep,
-            btnSyncNow, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnPeekWebApi,
+            btnSyncNow, btnPushAllChanges, btnPullPast, btnResetDayData, btnPeekWebApi,
             btnAdvancedToggle, panelAdvancedContent,
             btnCancelSync, lblStatus,
             lblLogCaption, txtLog

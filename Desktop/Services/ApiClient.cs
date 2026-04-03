@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using Polly;
+using Polly.Retry;
 using StartRef.Desktop.Models;
 
 namespace StartRef.Desktop.Services;
@@ -10,12 +12,33 @@ public class ApiClient
 {
     private readonly HttpClient _http;
     private readonly Func<AppSettings> _getSettings;
+    private readonly Action<string>? _log;
     public string? LastError { get; private set; }
 
-    public ApiClient(Func<AppSettings> getSettings)
+    private readonly ResiliencePipeline<HttpResponseMessage> _retryPipeline;
+
+    public ApiClient(Func<AppSettings> getSettings, Action<string>? log = null)
     {
         _getSettings = getSettings;
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+        _log = log;
+        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        _retryPipeline = new ResiliencePipelineBuilder<HttpResponseMessage>()
+            .AddRetry(new RetryStrategyOptions<HttpResponseMessage>
+            {
+                MaxRetryAttempts = 3,
+                BackoffType = DelayBackoffType.Exponential,
+                Delay = TimeSpan.FromSeconds(2),
+                ShouldHandle = new PredicateBuilder<HttpResponseMessage>()
+                    .Handle<HttpRequestException>()
+                    .Handle<TaskCanceledException>(ex => !ex.CancellationToken.IsCancellationRequested)
+                    .HandleResult(r => (int)r.StatusCode >= 500),
+                OnRetry = args =>
+                {
+                    _log?.Invoke($"{DateTime.Now:HH:mm:ss} API retry {args.AttemptNumber + 1}/3 after {args.RetryDelay.TotalSeconds:F0}s — {args.Outcome.Exception?.Message ?? $"HTTP {(int?)args.Outcome.Result?.StatusCode}"}");
+                    return ValueTask.CompletedTask;
+                }
+            })
+            .Build();
     }
 
     private AppSettings S => _getSettings();
@@ -53,7 +76,7 @@ public class ApiClient
         }
     }
 
-    /// <summary>PUT /api/competitions/{date}/runners — bulk upload</summary>
+    /// <summary>PUT /api/competitions/{date}/runners — bulk upload with Polly retry</summary>
     public async Task<BulkUploadResponse?> BulkUploadAsync(
         string date,
         BulkUploadRequest request,
@@ -64,15 +87,19 @@ public class ApiClient
         var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/competitions/{date}/runners";
         if (touchAll)
             url += "?touchAll=true";
-        var msg = new HttpRequestMessage(HttpMethod.Put, url)
-        {
-            Content = JsonContent.Create(request)
-        };
-        msg.Headers.Add("X-Api-Key", S.ApiKey);
 
         try
         {
-            var response = await _http.SendAsync(msg, ct);
+            var response = await _retryPipeline.ExecuteAsync(async token =>
+            {
+                var msg = new HttpRequestMessage(HttpMethod.Put, url)
+                {
+                    Content = JsonContent.Create(request)
+                };
+                msg.Headers.Add("X-Api-Key", S.ApiKey);
+                return await _http.SendAsync(msg, token);
+            }, ct);
+
             if (!response.IsSuccessStatusCode)
             {
                 LastError = await BuildHttpErrorAsync(response, ct);

@@ -26,11 +26,14 @@ public class PullPastDialog : Form
         };
         y += 28;
 
-        var btn10 = new Button { Text = "10", Location = new(10, y), Size = new(55, 28) };
-        var btn15 = new Button { Text = "15", Location = new(72, y), Size = new(55, 28) };
-        var btn30 = new Button { Text = "30", Location = new(134, y), Size = new(55, 28) };
-        var btn60 = new Button { Text = "60", Location = new(196, y), Size = new(55, 28) };
-        var btn240 = new Button { Text = "240", Location = new(258, y), Size = new(55, 28) };
+        var btn1 = new Button { Text = "1", Location = new(10, y), Size = new(40, 28) };
+        var btn3 = new Button { Text = "3", Location = new(54, y), Size = new(40, 28) };
+        var btn5 = new Button { Text = "5", Location = new(98, y), Size = new(40, 28) };
+        var btn10 = new Button { Text = "10", Location = new(142, y), Size = new(45, 28) };
+        var btn15 = new Button { Text = "15", Location = new(191, y), Size = new(45, 28) };
+        var btn30 = new Button { Text = "30", Location = new(240, y), Size = new(45, 28) };
+        var btn60 = new Button { Text = "60", Location = new(289, y), Size = new(45, 28) };
+        var btn240 = new Button { Text = "240", Location = new(338, y), Size = new(50, 28) };
 
         _nudMinutes = new NumericUpDown
         {
@@ -51,6 +54,9 @@ public class PullPastDialog : Form
             Size = new(150, 30)
         };
 
+        btn1.Click += (_, _) => _nudMinutes.Value = 1;
+        btn3.Click += (_, _) => _nudMinutes.Value = 3;
+        btn5.Click += (_, _) => _nudMinutes.Value = 5;
         btn10.Click += (_, _) => _nudMinutes.Value = 10;
         btn15.Click += (_, _) => _nudMinutes.Value = 15;
         btn30.Click += (_, _) => _nudMinutes.Value = 30;
@@ -59,6 +65,6 @@ public class PullPastDialog : Form
 
         AcceptButton = btnPull;
 
-        Controls.AddRange(new Control[] { lbl, btn10, btn15, btn30, btn60, btn240, _nudMinutes, lblMin, btnPull });
+        Controls.AddRange(new Control[] { lbl, btn1, btn3, btn5, btn10, btn15, btn30, btn60, btn240, _nudMinutes, lblMin, btnPull });
     }
 }

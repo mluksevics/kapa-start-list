@@ -74,10 +74,7 @@ public class DbIsamRepository
 
                         var mldKen = GetField(fields, $"MldKen{settings.DayNo}");
                         if (string.Equals(mldKen, "False", StringComparison.OrdinalIgnoreCase))
-                        {
-                            _log($"{Ts()} Scan startNr={startNr}: skipped (MldKen{settings.DayNo}=False)");
                             continue;
-                        }
 
                         dto.Surname = GetField(fields, "Name") ?? "";
                         dto.Name = GetField(fields, "Vorname") ?? "";
@@ -472,10 +469,7 @@ public class DbIsamRepository
             if (!int.TryParse(GetCol(parts, iStartNr), out int startNr) || startNr <= 0) continue;
 
             if (string.Equals(GetCol(parts, iMldKen), "False", StringComparison.OrdinalIgnoreCase))
-            {
-                _log($"{Ts()} GetAllRunners startNr={startNr}: skipped (MldKen=False)");
                 continue;
-            }
 
             int classId = int.TryParse(GetCol(parts, iKatNr), out var k) ? k : 0;
             int clubId = int.TryParse(GetCol(parts, iClubNr), out var c) ? c : 0;

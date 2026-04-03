@@ -174,6 +174,7 @@ public class SyncService
         var runners = isFullRange
             ? allRunners
             : allRunners.Where(r => r.StartNumber >= lo && r.StartNumber <= hi).ToList();
+        _log($"{Ts()} Force Push: DBISAM loaded {allRunners.Count} total, {runners.Count} in range.");
 
         if (runners.Count == 0)
         {
@@ -181,32 +182,50 @@ public class SyncService
             return;
         }
 
-        var request = new BulkUploadRequest
+        var now = DateTimeOffset.UtcNow;
+        int totalInserted = 0, totalUpdated = 0, totalUnchanged = 0;
+        var chunks = runners.Chunk(100).ToList();
+        _log($"{Ts()} Force Push: uploading {runners.Count} runner(s) in {chunks.Count} chunk(s)...");
+
+        for (int i = 0; i < chunks.Count; i++)
         {
-            Source = settings.DeviceName,
-            LastModifiedUtc = DateTimeOffset.UtcNow,
-            Runners = runners
-        };
-        var pushResult = await _api.BulkUploadAsync(date, request, touchAll: true, ct);
-        if (pushResult is null)
-            _log($"{Ts()} Force Push: upload failed — {_api.LastError ?? "API unreachable"}");
-        else
-            _log($"{Ts()} Force Push: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged}");
+            ct.ThrowIfCancellationRequested();
+            var chunk = chunks[i];
+            var request = new BulkUploadRequest
+            {
+                Source = settings.DeviceName,
+                LastModifiedUtc = now,
+                Runners = chunk.ToList()
+            };
+            var result = await _api.BulkUploadAsync(date, request, touchAll: true, ct);
+            if (result is null)
+            {
+                _log($"{Ts()} Force Push: chunk {i + 1}/{chunks.Count} failed — {_api.LastError ?? "API unreachable"}");
+                return;
+            }
+            totalInserted += result.Inserted;
+            totalUpdated += result.Updated;
+            totalUnchanged += result.Unchanged;
+            _log($"{Ts()} Force Push: chunk {i + 1}/{chunks.Count} done (ins={result.Inserted} upd={result.Updated} unch={result.Unchanged})");
+        }
+
+        _log($"{Ts()} Force Push: all done — inserted={totalInserted} updated={totalUpdated} unchanged={totalUnchanged}");
     }
 
-    /// <summary>Push all eligible rows from DBISAM; API compares and only bumps LastModified when values differ.</summary>
+    /// <summary>Push all eligible rows from DBISAM in chunks of 100; API compares and only bumps LastModified when values differ.</summary>
     public async Task PushAllChangesAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         var settings = _getSettings();
         var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
-        _log($"{Ts()} Push all changes: loading DBISAM...");
+        _log($"{Ts()} Push Updates: loading DBISAM...");
 
         var runners = await Task.Run(() => _dbIsamRepository.GetAllRunnersByDay(settings, ct), ct);
         var meaningful = runners.Where(r => HasIsamParticipantData(r)).ToList();
+        _log($"{Ts()} Push Updates: DBISAM loaded {runners.Count} total, {meaningful.Count} eligible.");
         if (meaningful.Count == 0)
         {
-            _log($"{Ts()} Push all changes: no eligible runners.");
+            _log($"{Ts()} Push Updates: no eligible runners.");
             return;
         }
 
@@ -214,17 +233,33 @@ public class SyncService
         foreach (var r in meaningful)
             r.LastModifiedUtc = now;
 
-        var request = new BulkUploadRequest
+        int totalInserted = 0, totalUpdated = 0, totalUnchanged = 0;
+        var chunks = meaningful.Chunk(100).ToList();
+        _log($"{Ts()} Push Updates: uploading {meaningful.Count} runner(s) in {chunks.Count} chunk(s)...");
+
+        for (int i = 0; i < chunks.Count; i++)
         {
-            Source = settings.DeviceName,
-            LastModifiedUtc = now,
-            Runners = meaningful
-        };
-        var pushResult = await _api.BulkUploadAsync(date, request, touchAll: false, ct);
-        if (pushResult is null)
-            _log($"{Ts()} Push all changes: upload failed — {_api.LastError ?? "API unreachable"}");
-        else
-            _log($"{Ts()} Push all changes: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged} skippedAsOlder={pushResult.SkippedAsOlder}");
+            ct.ThrowIfCancellationRequested();
+            var chunk = chunks[i];
+            var request = new BulkUploadRequest
+            {
+                Source = settings.DeviceName,
+                LastModifiedUtc = now,
+                Runners = chunk.ToList()
+            };
+            var result = await _api.BulkUploadAsync(date, request, touchAll: false, ct);
+            if (result is null)
+            {
+                _log($"{Ts()} Push Updates: chunk {i + 1}/{chunks.Count} failed — {_api.LastError ?? "API unreachable"}");
+                return;
+            }
+            totalInserted += result.Inserted;
+            totalUpdated += result.Updated;
+            totalUnchanged += result.Unchanged;
+            _log($"{Ts()} Push Updates: chunk {i + 1}/{chunks.Count} done (ins={result.Inserted} upd={result.Updated} unch={result.Unchanged})");
+        }
+
+        _log($"{Ts()} Push Updates: all done — inserted={totalInserted} updated={totalUpdated} unchanged={totalUnchanged}");
     }
 
     /// <summary>
@@ -271,7 +306,7 @@ public class SyncService
             return;
         }
 
-        _log($"{Ts()} Upload new: PUT {toUpload.Count} runner(s)...");
+        _log($"{Ts()} Upload new: uploading {toUpload.Count} runner(s) to API...");
         var request = new BulkUploadRequest
         {
             Source = settings.DeviceName,
@@ -282,7 +317,7 @@ public class SyncService
         if (pushResult is null)
             _log($"{Ts()} Upload new: upload fault — API unreachable.");
         else
-            _log($"{Ts()} Upload new: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged} skippedAsOlder={pushResult.SkippedAsOlder}");
+            _log($"{Ts()} Upload new: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged}");
     }
 
     private static bool HasIsamParticipantData(BulkRunnerDto r) =>
@@ -366,6 +401,7 @@ public class SyncService
         var settings = _getSettings();
         var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
         var clubs = await Task.Run(() => _dbIsamRepository.GetAllClubs(settings), ct);
+        _log($"{Ts()} Push Clubs: DBISAM loaded {clubs.Count} club(s).");
 
         if (clubs.Count == 0)
         {
@@ -373,6 +409,7 @@ public class SyncService
             return new UpsertLookupResponse();
         }
 
+        _log($"{Ts()} Push Clubs: uploading {clubs.Count} club(s) to API...");
         var response = await _api.UpsertClubsAsync(date, new UpsertLookupRequest
         {
             Source = settings.DeviceName,
@@ -393,6 +430,7 @@ public class SyncService
         var settings = _getSettings();
         var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
         var classes = await Task.Run(() => _dbIsamRepository.GetAllClasses(settings), ct);
+        _log($"{Ts()} Push Classes: DBISAM loaded {classes.Count} class(es).");
 
         if (classes.Count == 0)
         {
@@ -400,6 +438,7 @@ public class SyncService
             return new UpsertLookupResponse();
         }
 
+        _log($"{Ts()} Push Classes: uploading {classes.Count} class(es) to API...");
         var response = await _api.UpsertClassesAsync(date, new UpsertLookupRequest
         {
             Source = settings.DeviceName,
