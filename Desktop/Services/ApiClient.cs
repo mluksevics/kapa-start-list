@@ -15,7 +15,7 @@ public class ApiClient
     public ApiClient(Func<AppSettings> getSettings)
     {
         _getSettings = getSettings;
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
     }
 
     private AppSettings S => _getSettings();
@@ -60,6 +60,7 @@ public class ApiClient
         bool touchAll = false,
         CancellationToken ct = default)
     {
+        LastError = null;
         var url = $"{S.ApiBaseUrl.TrimEnd('/')}/api/competitions/{date}/runners";
         if (touchAll)
             url += "?touchAll=true";
@@ -72,15 +73,20 @@ public class ApiClient
         try
         {
             var response = await _http.SendAsync(msg, ct);
-            if (!response.IsSuccessStatusCode) return null;
+            if (!response.IsSuccessStatusCode)
+            {
+                LastError = await BuildHttpErrorAsync(response, ct);
+                return null;
+            }
             return await response.Content.ReadFromJsonAsync<BulkUploadResponse>(ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
+            LastError = ex.Message;
             return null;
         }
     }

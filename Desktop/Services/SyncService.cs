@@ -7,14 +7,7 @@ namespace StartRef.Desktop.Services;
 ///
 /// Each cycle:
 ///   1. PULL: GET /runners from API → get latest state from field devices
-///   2. WRITE to DBISAM: write ChipNr changes from field devices back to DBISAM
-///   3. SKIP (not yet supported by DLL):
-///        - DNS write-back (needs DbChangeDnsByStartNr)
-///        - Bulk read/push (needs DbReadAllTeiln)
-///
-/// DLL gaps to request from the Delphi developer:
-///   • DbReadAllTeiln(ctx, buffer, bufferSize) — enumerate all participants
-///   • DbChangeDnsByStartNr(ctx, startNr, dnsFlag) — set DNS/AufgabeTyp
+///   2. WRITE to DBISAM: apply Name/Surname/Club/ChipNr/KatNr/StartTime/DNS changes
 /// </summary>
 public class SyncService
 {
@@ -142,12 +135,17 @@ public class SyncService
     {
         int lo = Math.Min(minStartNumber, maxStartNumber);
         int hi = Math.Max(minStartNumber, maxStartNumber);
-        _log($"{Ts()} Force Push: scanning DBISAM {lo}–{hi} (workaround — ask Delphi dev for DbReadAllTeiln).");
+        bool isFullRange = lo == 1 && hi == 4000;
+        _log($"{Ts()} Force Push: loading DBISAM{(isFullRange ? "" : $" {lo}–{hi}")}...");
 
-        var runners = await Task.Run(() => _dbIsamRepository.ScanRunnersByStartNr(settings, minStartNumber, maxStartNumber, ct), ct);
+        var allRunners = await Task.Run(() => _dbIsamRepository.GetAllRunnersByDay(settings, ct), ct);
+        var runners = isFullRange
+            ? allRunners
+            : allRunners.Where(r => r.StartNumber >= lo && r.StartNumber <= hi).ToList();
+
         if (runners.Count == 0)
         {
-            _log($"{Ts()} Force Push: no runners found in scan — check DB path.");
+            _log($"{Ts()} Force Push: no runners found — check DB path.");
             return;
         }
 
@@ -159,7 +157,7 @@ public class SyncService
         };
         var pushResult = await _api.BulkUploadAsync(date, request, touchAll: true, ct);
         if (pushResult is null)
-            _log($"{Ts()} Force Push: upload failed — API unreachable.");
+            _log($"{Ts()} Force Push: upload failed — {_api.LastError ?? "API unreachable"}");
         else
             _log($"{Ts()} Force Push: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged}");
     }
@@ -170,9 +168,9 @@ public class SyncService
         ct.ThrowIfCancellationRequested();
         var settings = _getSettings();
         var date = ResolveCompetitionDate(settings).ToString("yyyy-MM-dd");
-        _log($"{Ts()} Push all changes: scanning DBISAM 1–4000...");
+        _log($"{Ts()} Push all changes: loading DBISAM...");
 
-        var runners = await Task.Run(() => _dbIsamRepository.ScanRunnersByStartNr(settings, ct), ct);
+        var runners = await Task.Run(() => _dbIsamRepository.GetAllRunnersByDay(settings, ct), ct);
         var meaningful = runners.Where(r => HasIsamParticipantData(r)).ToList();
         if (meaningful.Count == 0)
         {
@@ -192,7 +190,7 @@ public class SyncService
         };
         var pushResult = await _api.BulkUploadAsync(date, request, touchAll: false, ct);
         if (pushResult is null)
-            _log($"{Ts()} Push all changes: upload failed — API unreachable.");
+            _log($"{Ts()} Push all changes: upload failed — {_api.LastError ?? "API unreachable"}");
         else
             _log($"{Ts()} Push all changes: inserted={pushResult.Inserted} updated={pushResult.Updated} unchanged={pushResult.Unchanged} skippedAsOlder={pushResult.SkippedAsOlder}");
     }
@@ -217,8 +215,8 @@ public class SyncService
         var apiByStart = apiResponse.Runners.ToDictionary(r => r.StartNumber);
         _log($"{Ts()} Upload new: API runner count={apiResponse.Runners.Count}.");
 
-        _log($"{Ts()} Upload new: scanning DBISAM 1–4000...");
-        var dbRunners = await Task.Run(() => _dbIsamRepository.ScanRunnersByStartNr(settings, ct), ct);
+        _log($"{Ts()} Upload new: loading DBISAM...");
+        var dbRunners = await Task.Run(() => _dbIsamRepository.GetAllRunnersByDay(settings, ct), ct);
         var meaningful = dbRunners.Where(r => HasIsamParticipantData(r)).ToList();
         _log($"{Ts()} Upload new: DBISAM eligible rows={meaningful.Count}.");
 
@@ -295,19 +293,7 @@ public class SyncService
     public async Task<UpsertLookupResponse?> PushClubsAsync(CancellationToken ct = default)
     {
         var settings = _getSettings();
-        var runners = await Task.Run(() => _dbIsamRepository.ScanRunnersByStartNr(settings, ct), ct);
-        var clubs = runners
-            .Where(r => r.ClubId > 0 && !string.IsNullOrWhiteSpace(r.ClubName))
-            .GroupBy(r => r.ClubId)
-            .Select(g => new LookupItemDto
-            {
-                Id = g.Key,
-                Name = g.First().ClubName.Trim(),
-                StartPlace = 0
-            })
-            .Where(x => x.Name.Length > 0)
-            .OrderBy(x => x.Id)
-            .ToList();
+        var clubs = await Task.Run(() => _dbIsamRepository.GetAllClubs(settings), ct);
 
         if (clubs.Count == 0)
         {
@@ -333,19 +319,7 @@ public class SyncService
     public async Task<UpsertLookupResponse?> PushClassesAsync(CancellationToken ct = default)
     {
         var settings = _getSettings();
-        var runners = await Task.Run(() => _dbIsamRepository.ScanRunnersByStartNr(settings, ct), ct);
-        var classes = runners
-            .Where(r => r.ClassId > 0 && !string.IsNullOrWhiteSpace(r.ClassName))
-            .GroupBy(r => r.ClassId)
-            .Select(g => new LookupItemDto
-            {
-                Id = g.Key,
-                Name = g.First().ClassName.Trim(),
-                StartPlace = 0
-            })
-            .Where(x => x.Name.Length > 0)
-            .OrderBy(x => x.Id)
-            .ToList();
+        var classes = await Task.Run(() => _dbIsamRepository.GetAllClasses(settings), ct);
 
         if (classes.Count == 0)
         {

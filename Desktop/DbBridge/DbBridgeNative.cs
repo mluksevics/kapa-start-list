@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace StartRef.Desktop.DbBridge;
 
@@ -19,14 +20,14 @@ internal static class DbBridgeNative
 
     // ── Open / Close ─────────────────────────────────────────────────────────
 
-    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, EntryPoint = "DbOpen")]
-    public static extern IntPtr DbOpenRaw(byte[] dataDir);
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+    public static extern IntPtr DbOpen(string dataDir);
 
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
     public static extern void DbClose(IntPtr ctxHandle);
 
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-    public static extern int DbGetLastError(IntPtr ctxHandle, byte[] buffer, int bufferSize);
+    public static extern int DbGetLastError(IntPtr ctxHandle, StringBuilder buffer, int bufferSize);
 
     // ── Etap / Config ────────────────────────────────────────────────────────
 
@@ -34,9 +35,9 @@ internal static class DbBridgeNative
     public static extern int DbGetEtapInfo(
         IntPtr ctxHandle,
         int dayNo,
-        byte[] nameBuf,
+        StringBuilder nameBuf,
         int nameSize,
-        byte[] dateBuf,
+        StringBuilder dateBuf,
         int dateSize,
         out int nullzeit);
 
@@ -50,14 +51,14 @@ internal static class DbBridgeNative
 
     // ── Read ─────────────────────────────────────────────────────────────────
 
-    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-    public static extern int DbGetTeilnInfoByIdNr(IntPtr ctxHandle, int idNr, byte[] buffer, int bufferSize);
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbGetTeilnInfoByIdNr(IntPtr ctxHandle, int idNr, StringBuilder buffer, int bufferSize);
 
-    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-    public static extern int DbGetIdNrListByStartNr(IntPtr ctxHandle, int startNr, byte[] buffer, int bufferSize);
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbGetIdNrListByStartNr(IntPtr ctxHandle, int startNr, StringBuilder buffer, int bufferSize);
 
-    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-    public static extern int DbGetIdNrListByChipNr(IntPtr ctxHandle, int dayNo, int chipNr, byte[] buffer, int bufferSize);
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbGetIdNrListByChipNr(IntPtr ctxHandle, int dayNo, int chipNr, StringBuilder buffer, int bufferSize);
 
     // ── Change StartTime ─────────────────────────────────────────────────────
 
@@ -92,23 +93,74 @@ internal static class DbBridgeNative
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
     public static extern int DbChangeKatNrByChipNr(IntPtr ctxHandle, int dayNo, int newKatNr, int chipNr);
 
-    // ── Update Name ───────────────────────────────────────────────────────────
+    // ── Update Name (generic, any table) ────────────────────────────────────
 
     /// <summary>Updates the Name field of a record in the given table by IdNr (e.g. tableName="Teiln").</summary>
     [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, EntryPoint = "DbUpdateName")]
     public static extern int DbUpdateNameRaw(IntPtr ctxHandle, byte[] tableName, int idNr, byte[] newName);
 
-    // ── TODO: Not yet in DLL — request from Delphi developer ─────────────────
+    // ── Change Name / Vorname ────────────────────────────────────────────────
 
-    // [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-    // public static extern int DbChangeNameByStartNr(IntPtr ctxHandle, int startNr, byte[] newName);
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+    public static extern int DbChangeNameByIdNr(IntPtr ctxHandle, string newName, int idNr);
 
-    // [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
-    // public static extern int DbChangeSurnameByStartNr(IntPtr ctxHandle, int startNr, byte[] newSurname);
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+    public static extern int DbChangeNameByStartNr(IntPtr ctxHandle, string newName, int startNr);
 
-    // [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
-    // public static extern int DbChangeClubNrByStartNr(IntPtr ctxHandle, int newClubNr, int startNr);
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+    public static extern int DbChangeVornameByIdNr(IntPtr ctxHandle, string newVorname, int idNr);
 
-    // [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
-    // public static extern int DbChangeDnsByStartNr(IntPtr ctxHandle, int dayNo, int dnsFlag, int startNr);
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+    public static extern int DbChangeVornameByStartNr(IntPtr ctxHandle, string newVorname, int startNr);
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+    public static extern int DbChangeNameVornameByIdNr(IntPtr ctxHandle, string newName, string newVorname, int idNr);
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+    public static extern int DbChangeNameVornameByStartNr(IntPtr ctxHandle, string newName, string newVorname, int startNr);
+
+    // ── DNS (NCKen) ──────────────────────────────────────────────────────────
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbSetDNSByIdNr(IntPtr ctxHandle, int dayNo, int idNr);
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbClearDNSByIdNr(IntPtr ctxHandle, int dayNo, int idNr);
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbSetDNSByStartNr(IntPtr ctxHandle, int dayNo, int startNr);
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbClearDNSByStartNr(IntPtr ctxHandle, int dayNo, int startNr);
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbSetDNSByChipNr(IntPtr ctxHandle, int dayNo, int chipNr);
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbClearDNSByChipNr(IntPtr ctxHandle, int dayNo, int chipNr);
+
+    // ── Change ClubNr ────────────────────────────────────────────────────────
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbChangeClubNrByIdNr(IntPtr ctxHandle, int newClubNr, int idNr);
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbChangeClubNrByStartNr(IntPtr ctxHandle, int newClubNr, int startNr);
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbChangeClubNrByChipNr(IntPtr ctxHandle, int dayNo, int newClubNr, int chipNr);
+
+    // ── CSV bulk read (2-call buffer pattern, IntPtr for unmanaged alloc) ───
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbGetAllClasses(IntPtr ctxHandle, IntPtr buffer, int bufferSize);
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbGetAllClubs(IntPtr ctxHandle, IntPtr buffer, int bufferSize);
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbGetAllTeiln(IntPtr ctxHandle, IntPtr buffer, int bufferSize);
+
+    [DllImport("DbBridge.dll", CallingConvention = CallingConvention.StdCall)]
+    public static extern int DbGetAllTeilnDay(IntPtr ctxHandle, int dayNo, IntPtr buffer, int bufferSize);
 }

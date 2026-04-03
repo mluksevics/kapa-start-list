@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace StartRef.Desktop.DbBridge;
@@ -50,7 +51,7 @@ public class DbBridgeService : IDisposable
         _dataDir = dataDir;
         try
         {
-            _ctx = DbBridgeNative.DbOpenRaw(EncodeString(dataDir));
+            _ctx = DbBridgeNative.DbOpen(dataDir);
             if (_ctx == IntPtr.Zero)
             {
                 _log?.Invoke("DbOpen returned NULL — check path and DLL dependencies.");
@@ -107,10 +108,10 @@ public class DbBridgeService : IDisposable
     private string GetLastError()
     {
         if (!IsOpen) return string.Empty;
-        var buffer = new byte[1024];
-        try { DbBridgeNative.DbGetLastError(_ctx, buffer, buffer.Length); }
+        var sb = new StringBuilder(1024);
+        try { DbBridgeNative.DbGetLastError(_ctx, sb, sb.Capacity); }
         catch { /* ignore */ }
-        return DecodeBuffer(buffer);
+        return sb.ToString();
     }
 
     private static Encoding CreateEncoding(int codePage)
@@ -205,12 +206,12 @@ public class DbBridgeService : IDisposable
     public (DbBridgeResult Result, DbEtapInfo? Info) GetEtapInfo(int dayNo)
     {
         if (!IsOpen) return (NotOpen(), null);
-        var nameBuf = new byte[256];
-        var dateBuf = new byte[256];
-        int code = DbBridgeNative.DbGetEtapInfo(_ctx, dayNo, nameBuf, 255, dateBuf, 255, out int nullzeit);
+        var nameBuf = new StringBuilder(256);
+        var dateBuf = new StringBuilder(256);
+        int code = DbBridgeNative.DbGetEtapInfo(_ctx, dayNo, nameBuf, nameBuf.Capacity, dateBuf, dateBuf.Capacity, out int nullzeit);
         var result = Wrap(code, "OK");
         if (!result.Success) return (result, null);
-        return (result, new DbEtapInfo(DecodeBuffer(nameBuf), DecodeBuffer(dateBuf), nullzeit));
+        return (result, new DbEtapInfo(nameBuf.ToString(), dateBuf.ToString(), nullzeit));
     }
 
     // ── Test mode ────────────────────────────────────────────────────────────
@@ -226,28 +227,28 @@ public class DbBridgeService : IDisposable
     public (DbBridgeResult Result, string? Raw) GetTeilnInfoByIdNr(int idNr)
     {
         if (!IsOpen) return (NotOpen(), null);
-        var buf = new byte[4096];
-        int code = DbBridgeNative.DbGetTeilnInfoByIdNr(_ctx, idNr, buf, buf.Length);
+        var buf = new StringBuilder(8192);
+        int code = DbBridgeNative.DbGetTeilnInfoByIdNr(_ctx, idNr, buf, buf.Capacity);
         var result = Wrap(code, "OK");
-        return (result, result.Success ? DecodeBuffer(buf) : null);
+        return (result, result.Success ? buf.ToString() : null);
     }
 
     public (DbBridgeResult Result, string? Raw) GetIdNrListByStartNr(int startNr)
     {
         if (!IsOpen) return (NotOpen(), null);
-        var buf = new byte[4096];
-        int code = DbBridgeNative.DbGetIdNrListByStartNr(_ctx, startNr, buf, buf.Length);
+        var buf = new StringBuilder(8192);
+        int code = DbBridgeNative.DbGetIdNrListByStartNr(_ctx, startNr, buf, buf.Capacity);
         var result = Wrap(code, "OK");
-        return (result, result.Success ? DecodeBuffer(buf) : null);
+        return (result, result.Success ? buf.ToString() : null);
     }
 
     public (DbBridgeResult Result, string? Raw) GetIdNrListByChipNr(int dayNo, int chipNr)
     {
         if (!IsOpen) return (NotOpen(), null);
-        var buf = new byte[4096];
-        int code = DbBridgeNative.DbGetIdNrListByChipNr(_ctx, dayNo, chipNr, buf, buf.Length);
+        var buf = new StringBuilder(8192);
+        int code = DbBridgeNative.DbGetIdNrListByChipNr(_ctx, dayNo, chipNr, buf, buf.Capacity);
         var result = Wrap(code, "OK");
-        return (result, result.Success ? DecodeBuffer(buf) : null);
+        return (result, result.Success ? buf.ToString() : null);
     }
 
     // ── Change StartTime ─────────────────────────────────────────────────────
@@ -290,23 +291,101 @@ public class DbBridgeService : IDisposable
         IsOpen ? WrapWrite(dayNo, "KatNr updated",
             () => DbBridgeNative.DbChangeKatNrByChipNr(_ctx, dayNo, newKatNr, chipNr)) : NotOpen();
 
-    // ── Change Name / Surname / ClubNr ───────────────────────────────────────
-    // TODO: DLL functions below do not yet exist in DbBridgeNative.cs.
-    //       Request DbChangeNameByStartNr, DbChangeSurnameByStartNr, DbChangeClubNrByStartNr
-    //       from the Delphi developer, then wire them up here.
+    // ── Change Name / Vorname ────────────────────────────────────────────────
+    // DBISAM "Name" = surname; "Vorname" = first name.
 
-    public DbBridgeResult ChangeNameByStartNr(int startNr, string name) =>
-        throw new NotSupportedException("DbChangeNameByStartNr not yet available in DLL.");
+    public DbBridgeResult ChangeNameByIdNr(int idNr, string newName) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeNameByIdNr(_ctx, newName, idNr), "Name updated") : NotOpen();
 
-    public DbBridgeResult ChangeSurnameByStartNr(int startNr, string surname) =>
-        throw new NotSupportedException("DbChangeSurnameByStartNr not yet available in DLL.");
+    public DbBridgeResult ChangeNameByStartNr(int startNr, string newName) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeNameByStartNr(_ctx, newName, startNr), "Name updated") : NotOpen();
+
+    public DbBridgeResult ChangeVornameByIdNr(int idNr, string newVorname) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeVornameByIdNr(_ctx, newVorname, idNr), "Vorname updated") : NotOpen();
+
+    public DbBridgeResult ChangeVornameByStartNr(int startNr, string newVorname) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeVornameByStartNr(_ctx, newVorname, startNr), "Vorname updated") : NotOpen();
+
+    public DbBridgeResult ChangeNameVornameByIdNr(int idNr, string newName, string newVorname) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeNameVornameByIdNr(_ctx, newName, newVorname, idNr), "Name+Vorname updated") : NotOpen();
+
+    public DbBridgeResult ChangeNameVornameByStartNr(int startNr, string newName, string newVorname) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeNameVornameByStartNr(_ctx, newName, newVorname, startNr), "Name+Vorname updated") : NotOpen();
+
+    // ── DNS (NCKen) ──────────────────────────────────────────────────────────
+    // NCKen values: 0=OK, 1=DNS, 2=DNF, 3=MP, 4=DQ.
+    // DNS functions use IsDayAllowed — WrapWrite applies test mode when needed.
+
+    public DbBridgeResult SetDNSByIdNr(int dayNo, int idNr) =>
+        IsOpen ? WrapWrite(dayNo, "DNS set", () => DbBridgeNative.DbSetDNSByIdNr(_ctx, dayNo, idNr)) : NotOpen();
+
+    public DbBridgeResult ClearDNSByIdNr(int dayNo, int idNr) =>
+        IsOpen ? WrapWrite(dayNo, "DNS cleared", () => DbBridgeNative.DbClearDNSByIdNr(_ctx, dayNo, idNr)) : NotOpen();
+
+    public DbBridgeResult SetDNSByStartNr(int dayNo, int startNr) =>
+        IsOpen ? WrapWrite(dayNo, "DNS set", () => DbBridgeNative.DbSetDNSByStartNr(_ctx, dayNo, startNr)) : NotOpen();
+
+    public DbBridgeResult ClearDNSByStartNr(int dayNo, int startNr) =>
+        IsOpen ? WrapWrite(dayNo, "DNS cleared", () => DbBridgeNative.DbClearDNSByStartNr(_ctx, dayNo, startNr)) : NotOpen();
+
+    public DbBridgeResult SetDNSByChipNr(int dayNo, int chipNr) =>
+        IsOpen ? WrapWrite(dayNo, "DNS set", () => DbBridgeNative.DbSetDNSByChipNr(_ctx, dayNo, chipNr)) : NotOpen();
+
+    public DbBridgeResult ClearDNSByChipNr(int dayNo, int chipNr) =>
+        IsOpen ? WrapWrite(dayNo, "DNS cleared", () => DbBridgeNative.DbClearDNSByChipNr(_ctx, dayNo, chipNr)) : NotOpen();
+
+    // ── Change ClubNr ────────────────────────────────────────────────────────
+
+    public DbBridgeResult ChangeClubNrByIdNr(int newClubNr, int idNr) =>
+        IsOpen ? Wrap(DbBridgeNative.DbChangeClubNrByIdNr(_ctx, newClubNr, idNr), "ClubNr updated") : NotOpen();
 
     public DbBridgeResult ChangeClubNrByStartNr(int newClubNr, int startNr) =>
-        throw new NotSupportedException("DbChangeClubNrByStartNr not yet available in DLL.");
+        IsOpen ? Wrap(DbBridgeNative.DbChangeClubNrByStartNr(_ctx, newClubNr, startNr), "ClubNr updated") : NotOpen();
 
-    /// <summary>dnsFlag: 1 = DNS, 0 = not DNS. Stub until DbChangeDnsByStartNr exists in DLL.</summary>
-    public DbBridgeResult ChangeDnsByStartNr(int dayNo, int dnsFlag, int startNr) =>
-        new DbBridgeResult(false, 0, "DbChangeDnsByStartNr not yet in DLL.");
+    public DbBridgeResult ChangeClubNrByChipNr(int dayNo, int newClubNr, int chipNr) =>
+        IsOpen ? WrapWrite(dayNo, "ClubNr updated",
+            () => DbBridgeNative.DbChangeClubNrByChipNr(_ctx, dayNo, newClubNr, chipNr)) : NotOpen();
+
+    // ── CSV bulk read ────────────────────────────────────────────────────────
+    // Uses 2-call buffer pattern: first call (null buffer) returns needed byte count;
+    // second call with allocated buffer fills it and returns actual byte count.
+
+    private (DbBridgeResult Result, string? Csv) ReadCsvBuffer(Func<IntPtr, int, int> dllCall)
+    {
+        if (!IsOpen) return (NotOpen(), null);
+
+        // First call: IntPtr.Zero → DLL returns needed byte count (not including null terminator).
+        int needed = dllCall(IntPtr.Zero, 0);
+        _log?.Invoke($"CSV size query: {needed} bytes needed");
+        if (needed <= 0) return (Fail(needed), null);
+
+        // Second call: allocate len+1 bytes (DLL requires room for null terminator).
+        IntPtr buf = Marshal.AllocHGlobal(needed + 1);
+        try
+        {
+            Marshal.WriteByte(buf + needed, 0); // ensure null terminator
+            int actual = dllCall(buf, needed + 1);
+            _log?.Invoke($"CSV read: {actual} bytes actual");
+            if (actual <= 0) return (Fail(actual), null);
+            return (Ok("OK"), Marshal.PtrToStringAnsi(buf) ?? string.Empty);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buf);
+        }
+    }
+
+    public (DbBridgeResult Result, string? Csv) GetAllClasses() =>
+        ReadCsvBuffer((buf, size) => DbBridgeNative.DbGetAllClasses(_ctx, buf, size));
+
+    public (DbBridgeResult Result, string? Csv) GetAllClubs() =>
+        ReadCsvBuffer((buf, size) => DbBridgeNative.DbGetAllClubs(_ctx, buf, size));
+
+    public (DbBridgeResult Result, string? Csv) GetAllTeiln() =>
+        ReadCsvBuffer((buf, size) => DbBridgeNative.DbGetAllTeiln(_ctx, buf, size));
+
+    public (DbBridgeResult Result, string? Csv) GetAllTeilnDay(int dayNo) =>
+        ReadCsvBuffer((buf, size) => DbBridgeNative.DbGetAllTeilnDay(_ctx, dayNo, buf, size));
 
     // ── Update Name ───────────────────────────────────────────────────────────
 

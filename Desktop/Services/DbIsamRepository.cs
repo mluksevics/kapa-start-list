@@ -12,7 +12,8 @@ public class DbIsamRepository
         string? Name,
         string? Surname,
         int ClubId,
-        string? ClubName);
+        string? ClubName,
+        int NcKen);  // 0=OK, 1=DNS, 2=DNF, 3=MP, 4=DQ; -1=unknown
 
     private readonly Action<string> _log;
 
@@ -154,7 +155,12 @@ public class DbIsamRepository
                         HintIncludes(r, "StartTime"))
             .ToList();
 
-        bool hasDbUpdates = chipUpdates.Count > 0 || katUpdates.Count > 0 || startTimeUpdates.Count > 0;
+        var foreignUpdates = pulledRunners
+            .Where(r => !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        bool hasDbUpdates = chipUpdates.Count > 0 || katUpdates.Count > 0 ||
+                            startTimeUpdates.Count > 0 || foreignUpdates.Count > 0;
         if (hasDbUpdates && !string.IsNullOrEmpty(settings.DbIsamPath))
         {
             using var db = new DbBridgeService(_log);
@@ -162,44 +168,52 @@ public class DbIsamRepository
             if (db.Open(settings.DbIsamPath))
             {
                 var snapshots = new Dictionary<(int StartNumber, int DayNo), DbRunnerSnapshot?>();
-                var foreignUpdates = pulledRunners
-                    .Where(r => !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
 
                 foreach (var r in foreignUpdates)
                 {
                     ct.ThrowIfCancellationRequested();
-                    bool logName = HintIncludes(r, "Name");
-                    bool logSurname = HintIncludes(r, "Surname");
-                    bool logClub = HintIncludes(r, "ClubId");
-                    if (!logName && !logSurname && !logClub)
+                    bool applyName = HintIncludes(r, "Name");
+                    bool applySurname = HintIncludes(r, "Surname");
+                    bool applyClub = HintIncludes(r, "ClubId");
+                    if (!applyName && !applySurname && !applyClub)
                         continue;
 
                     var snapshot = GetSnapshot(db, snapshots, settings.DayNo, r.StartNumber);
                     if (snapshot is null) continue;
 
-                    if (logName)
+                    if (applyName)
                     {
+                        // API Name = first name = DBISAM Vorname
                         if (TextEqual(snapshot.Name, r.Name))
-                            _log($"{Ts()} DBISAM Name #{r.StartNumber}: SKIP unchanged ('{r.Name}')");
+                            _log($"{Ts()} DBISAM Vorname #{r.StartNumber}: SKIP unchanged ('{r.Name}')");
                         else
-                            _log($"{Ts()} DBISAM Name #{r.StartNumber}: NEEDS change ('{snapshot.Name ?? "-"}' → '{r.Name}') [not applied: DLL missing DbChangeNameByStartNr]");
+                        {
+                            var res = db.ChangeVornameByStartNr(r.StartNumber, r.Name ?? "");
+                            _log($"{Ts()} DBISAM Vorname #{r.StartNumber} → '{r.Name}': {(res.Success ? "OK" : $"ERROR {res.Message}")}");
+                        }
                     }
 
-                    if (logSurname)
+                    if (applySurname)
                     {
+                        // API Surname = last name = DBISAM Name
                         if (TextEqual(snapshot.Surname, r.Surname))
-                            _log($"{Ts()} DBISAM Surname #{r.StartNumber}: SKIP unchanged ('{r.Surname}')");
+                            _log($"{Ts()} DBISAM Name #{r.StartNumber}: SKIP unchanged ('{r.Surname}')");
                         else
-                            _log($"{Ts()} DBISAM Surname #{r.StartNumber}: NEEDS change ('{snapshot.Surname ?? "-"}' → '{r.Surname}') [not applied: DLL missing DbChangeSurnameByStartNr]");
+                        {
+                            var res = db.ChangeNameByStartNr(r.StartNumber, r.Surname ?? "");
+                            _log($"{Ts()} DBISAM Name #{r.StartNumber} → '{r.Surname}': {(res.Success ? "OK" : $"ERROR {res.Message}")}");
+                        }
                     }
 
-                    if (logClub)
+                    if (applyClub)
                     {
-                        if (snapshot.ClubId == r.ClubId && TextEqual(snapshot.ClubName, r.ClubName))
-                            _log($"{Ts()} DBISAM Club #{r.StartNumber}: SKIP unchanged ('{r.ClubName}'/{r.ClubId})");
+                        if (snapshot.ClubId == r.ClubId)
+                            _log($"{Ts()} DBISAM ClubNr #{r.StartNumber}: SKIP unchanged ({r.ClubId})");
                         else
-                            _log($"{Ts()} DBISAM Club #{r.StartNumber}: NEEDS change ('{snapshot.ClubName ?? "-"}'/{snapshot.ClubId} → '{r.ClubName}'/{r.ClubId}) [not applied: DLL missing DbChangeClubNrByStartNr]");
+                        {
+                            var res = db.ChangeClubNrByStartNr(r.ClubId, r.StartNumber);
+                            _log($"{Ts()} DBISAM ClubNr #{r.StartNumber} → {r.ClubId}: {(res.Success ? "OK" : $"ERROR {res.Message}")}");
+                        }
                     }
                 }
 
@@ -279,36 +293,33 @@ public class DbIsamRepository
                     var res = db.ChangeStartTimeByStartNr(settings.DayNo, r.StartTime!, r.StartNumber);
                     _log($"{Ts()} DBISAM StartTime #{r.StartNumber} → {r.StartTime}: {(res.Success ? "OK" : $"ERROR {res.Message}")}");
                 }
-            }
-            else
-            {
-                _log($"{Ts()} DBISAM not available — writes skipped. Check DB path and DbBridge.dll.");
-            }
-        }
 
-        var foreignForDns = pulledRunners
-            .Where(r => !string.Equals(r.LastModifiedBy, settings.DeviceName, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        if (foreignForDns.Count > 0 && !string.IsNullOrEmpty(settings.DbIsamPath))
-        {
-            using var dnsDb = new DbBridgeService(_log);
-            dnsDb.TestMode = settings.IsTestMode;
-            if (dnsDb.Open(settings.DbIsamPath))
-            {
-                foreach (var r in foreignForDns)
+                foreach (var r in foreignUpdates)
                 {
                     ct.ThrowIfCancellationRequested();
                     if (r.StatusId == 3)
                     {
-                        var res = dnsDb.ChangeDnsByStartNr(settings.DayNo, dnsFlag: 1, r.StartNumber);
-                        _log($"{Ts()} DBISAM DNS #{r.StartNumber}: {(res.Success ? "OK" : res.Message)}");
+                        var res = db.SetDNSByStartNr(settings.DayNo, r.StartNumber);
+                        _log($"{Ts()} DBISAM DNS set #{r.StartNumber}: {(res.Success ? "OK" : $"ERROR {res.Message}")}");
                     }
                     else if (r.StatusId == 1 && HintIncludes(r, "StatusId"))
                     {
-                        var res = dnsDb.ChangeDnsByStartNr(settings.DayNo, dnsFlag: 0, r.StartNumber);
-                        _log($"{Ts()} DBISAM DNS clear #{r.StartNumber}: {(res.Success ? "OK" : res.Message)}");
+                        // Only clear DNS if runner currently has DNS status in DBISAM.
+                        // Do not touch DNF/MP/DQ (NCKen 2/3/4) or already-OK (NCKen 0).
+                        var snapshot = GetSnapshot(db, snapshots, settings.DayNo, r.StartNumber);
+                        if (snapshot is not null && snapshot.NcKen != 1)
+                        {
+                            _log($"{Ts()} DBISAM DNS clear #{r.StartNumber}: SKIP — current NCKen={snapshot.NcKen} (not DNS)");
+                            continue;
+                        }
+                        var res = db.ClearDNSByStartNr(settings.DayNo, r.StartNumber);
+                        _log($"{Ts()} DBISAM DNS clear #{r.StartNumber}: {(res.Success ? "OK" : $"ERROR {res.Message}")}");
                     }
                 }
+            }
+            else
+            {
+                _log($"{Ts()} DBISAM not available — writes skipped. Check DB path and DbBridge.dll.");
             }
         }
     }
@@ -387,10 +398,246 @@ public class DbIsamRepository
         var clubName = GetField(fields, "Klubs");
         int clubId = int.TryParse(GetField(fields, "ClubNr"), out var clubNr) ? clubNr : 0;
         int classId = int.TryParse(GetField(fields, "KatNr"), out var katNr) ? katNr : 0;
+        int ncKen = int.TryParse(GetField(fields, $"NCKen{dayNo}"), out var nc) ? nc : -1;
 
-        var snapshot = new DbRunnerSnapshot(chip, classId, start, name, surname, clubId, clubName);
+        var snapshot = new DbRunnerSnapshot(chip, classId, start, name, surname, clubId, clubName, ncKen);
         cache[key] = snapshot;
         return snapshot;
+    }
+
+    // ── CSV-based bulk reads ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Loads all participants for the configured day in one DLL call using DbGetAllTeilnDay.
+    /// Joins club/class names from DbGetAllClubs and DbGetAllClasses.
+    /// NCKen=1 (DNS) is mapped to StatusId=3; all others to StatusId=1.
+    /// </summary>
+    public List<BulkRunnerDto> GetAllRunnersByDay(AppSettings settings, CancellationToken ct = default)
+    {
+        var results = new List<BulkRunnerDto>();
+
+        if (string.IsNullOrEmpty(settings.DbIsamPath))
+        {
+            _log($"{Ts()} GetAllRunners: DB path not set.");
+            return results;
+        }
+
+        using var db = new DbBridgeService(_log);
+        if (!db.Open(settings.DbIsamPath))
+        {
+            _log($"{Ts()} GetAllRunners: cannot open DBISAM.");
+            return results;
+        }
+
+        var clubNames = new Dictionary<int, string>();
+        var (clubRes, clubCsv) = db.GetAllClubs();
+        if (clubRes.Success && clubCsv != null)
+            clubNames = ParseClubsCsvToDict(clubCsv);
+
+        var classInfo = new Dictionary<int, (string Name, int StartPlace)>();
+        var (classRes, classCsv) = db.GetAllClasses();
+        if (classRes.Success && classCsv != null)
+            classInfo = ParseClassesCsvToDict(classCsv, settings.DayNo);
+
+        var (teilnRes, teilnCsv) = db.GetAllTeilnDay(settings.DayNo);
+        if (!teilnRes.Success || teilnCsv == null)
+        {
+            _log($"{Ts()} GetAllRunners: GetAllTeilnDay failed: {teilnRes.Message}");
+            return results;
+        }
+
+        _log($"{Ts()} GetAllRunners: CSV received, {teilnCsv.Length} chars");
+        var lines = teilnCsv.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        _log($"{Ts()} GetAllRunners: {lines.Length} lines (header + data)");
+        if (lines.Length < 2) { _log($"{Ts()} GetAllRunners: no data rows in CSV"); return results; }
+
+        var hdr = ParseCsvHeader(lines[0]);
+        int iStartNr  = Col(hdr, "StartNr");
+        int iName     = Col(hdr, "Name");
+        int iVorname  = Col(hdr, "Vorname");
+        int iKatNr    = Col(hdr, "KatNr");
+        int iClubNr   = Col(hdr, "ClubNr");
+        int iChipNr   = Col(hdr, "ChipNr");
+        int iMldKen   = Col(hdr, "MldKen");
+        int iNcKen    = Col(hdr, "NCKen");
+        int iStart    = Col(hdr, "Start");
+        if (iStartNr < 0) { _log($"{Ts()} GetAllRunners: 'StartNr' column not found in: {lines[0]}"); return results; }
+
+        var now = DateTimeOffset.UtcNow;
+        for (int i = 1; i < lines.Length; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var parts = lines[i].Split(';');
+
+            if (!int.TryParse(GetCol(parts, iStartNr), out int startNr) || startNr <= 0) continue;
+
+            if (string.Equals(GetCol(parts, iMldKen), "False", StringComparison.OrdinalIgnoreCase))
+            {
+                _log($"{Ts()} GetAllRunners startNr={startNr}: skipped (MldKen=False)");
+                continue;
+            }
+
+            int classId = int.TryParse(GetCol(parts, iKatNr), out var k) ? k : 0;
+            int clubId = int.TryParse(GetCol(parts, iClubNr), out var c) ? c : 0;
+            int chipNr = int.TryParse(GetCol(parts, iChipNr), out var ch) ? ch : 0;
+            int ncKen = int.TryParse(GetCol(parts, iNcKen), out var nc) ? nc : 0;
+            var startTime = GetCol(parts, iStart);
+
+            classInfo.TryGetValue(classId, out var cls);
+            clubNames.TryGetValue(clubId, out var clubName);
+
+            results.Add(new BulkRunnerDto
+            {
+                StartNumber = startNr,
+                Surname = GetCol(parts, iName) ?? "",
+                Name = GetCol(parts, iVorname) ?? "",
+                ClassId = classId,
+                ClassName = cls.Name ?? "",
+                ClubId = clubId,
+                ClubName = clubName ?? "",
+                SiChipNo = chipNr > 0 ? chipNr.ToString() : null,
+                StartTime = string.IsNullOrEmpty(startTime) ? null : startTime,
+                StatusId = ncKen == 1 ? 3 : 1,
+                LastModifiedUtc = now
+            });
+        }
+
+        _log($"{Ts()} GetAllRunners: {results.Count} runners loaded (day {settings.DayNo}).");
+        return results;
+    }
+
+    /// <summary>Returns all clubs from DBISAM as lookup items (ClubNr → Ort).</summary>
+    public List<LookupItemDto> GetAllClubs(AppSettings settings)
+    {
+        var result = new List<LookupItemDto>();
+        if (string.IsNullOrEmpty(settings.DbIsamPath)) return result;
+
+        using var db = new DbBridgeService(_log);
+        if (!db.Open(settings.DbIsamPath)) return result;
+
+        var (res, csv) = db.GetAllClubs();
+        if (!res.Success || csv == null)
+        {
+            _log($"{Ts()} GetAllClubs: failed: {res.Message}");
+            return result;
+        }
+
+        _log($"{Ts()} GetAllClubs: CSV received, {csv.Length} chars");
+        var lines = csv.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        _log($"{Ts()} GetAllClubs: {lines.Length} lines (header + data)");
+        if (lines.Length < 2) { _log($"{Ts()} GetAllClubs: no data rows in CSV"); return result; }
+
+        var hdr = ParseCsvHeader(lines[0]);
+        int iClubNr = Col(hdr, "ClubNr");
+        int iOrt    = Col(hdr, "Ort");
+        if (iClubNr < 0) { _log($"{Ts()} GetAllClubs: 'ClubNr' column not found in: {lines[0]}"); return result; }
+
+        for (int i = 1; i < lines.Length; i++)
+        {
+            var parts = lines[i].Split(';');
+            if (int.TryParse(GetCol(parts, iClubNr), out int id) && id > 0)
+                result.Add(new LookupItemDto { Id = id, Name = GetCol(parts, iOrt) ?? "" });
+        }
+
+        _log($"{Ts()} GetAllClubs: {result.Count} clubs loaded.");
+        return result;
+    }
+
+    /// <summary>Returns all classes from DBISAM as lookup items (KatNr → KatKurz, StartPlatz for DayNo).</summary>
+    public List<LookupItemDto> GetAllClasses(AppSettings settings)
+    {
+        var result = new List<LookupItemDto>();
+        if (string.IsNullOrEmpty(settings.DbIsamPath)) return result;
+
+        using var db = new DbBridgeService(_log);
+        if (!db.Open(settings.DbIsamPath)) return result;
+
+        var (res, csv) = db.GetAllClasses();
+        if (!res.Success || csv == null)
+        {
+            _log($"{Ts()} GetAllClasses: failed: {res.Message}");
+            return result;
+        }
+
+        _log($"{Ts()} GetAllClasses: CSV received, {csv.Length} chars");
+        var lines = csv.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        _log($"{Ts()} GetAllClasses: {lines.Length} lines (header + data)");
+        if (lines.Length < 2) { _log($"{Ts()} GetAllClasses: no data rows in CSV"); return result; }
+
+        var hdr = ParseCsvHeader(lines[0]);
+        int iKatNr      = Col(hdr, "KatNr");
+        int iKatKurz    = Col(hdr, "KatKurz");
+        int iStartPlatz = Col(hdr, $"StartPlatz{settings.DayNo}");
+        if (iKatNr < 0) { _log($"{Ts()} GetAllClasses: 'KatNr' column not found in: {lines[0]}"); return result; }
+
+        for (int i = 1; i < lines.Length; i++)
+        {
+            var parts = lines[i].Split(';');
+            if (int.TryParse(GetCol(parts, iKatNr), out int id) && id > 0)
+            {
+                int startPlace = int.TryParse(GetCol(parts, iStartPlatz), out var sp) ? sp : 0;
+                result.Add(new LookupItemDto { Id = id, Name = GetCol(parts, iKatKurz) ?? "", StartPlace = startPlace });
+            }
+        }
+
+        _log($"{Ts()} GetAllClasses: {result.Count} classes loaded.");
+        return result;
+    }
+
+    private static Dictionary<string, int> ParseCsvHeader(string line)
+    {
+        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var cols = line.Split(';');
+        for (int i = 0; i < cols.Length; i++)
+            result[cols[i].Trim()] = i;
+        return result;
+    }
+
+    /// <summary>Returns the column index, or -1 if the column name is not in the header.</summary>
+    private static int Col(Dictionary<string, int> hdr, string name) =>
+        hdr.TryGetValue(name, out int i) ? i : -1;
+
+    private static string? GetCol(string[] parts, int index) =>
+        index >= 0 && index < parts.Length ? parts[index].Trim() : null;
+
+    private static Dictionary<int, string> ParseClubsCsvToDict(string csv)
+    {
+        var result = new Dictionary<int, string>();
+        var lines = csv.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        if (lines.Length < 2) return result;
+        var hdr = ParseCsvHeader(lines[0]);
+        int iId   = Col(hdr, "ClubNr");
+        int iName = Col(hdr, "Ort");
+        if (iId < 0) return result;
+        for (int i = 1; i < lines.Length; i++)
+        {
+            var parts = lines[i].Split(';');
+            if (int.TryParse(GetCol(parts, iId), out int id) && id > 0)
+                result[id] = GetCol(parts, iName) ?? "";
+        }
+        return result;
+    }
+
+    private static Dictionary<int, (string Name, int StartPlace)> ParseClassesCsvToDict(string csv, int dayNo)
+    {
+        var result = new Dictionary<int, (string, int)>();
+        var lines = csv.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        if (lines.Length < 2) return result;
+        var hdr = ParseCsvHeader(lines[0]);
+        int iId         = Col(hdr, "KatNr");
+        int iName       = Col(hdr, "KatKurz");
+        int iStartPlatz = Col(hdr, $"StartPlatz{dayNo}");
+        if (iId < 0) return result;
+        for (int i = 1; i < lines.Length; i++)
+        {
+            var parts = lines[i].Split(';');
+            if (int.TryParse(GetCol(parts, iId), out int id) && id > 0)
+            {
+                int sp = int.TryParse(GetCol(parts, iStartPlatz), out var s) ? s : 0;
+                result[id] = (GetCol(parts, iName) ?? "", sp);
+            }
+        }
+        return result;
     }
 
     private static bool ChipsEqual(string? currentChip, string? incomingChip)

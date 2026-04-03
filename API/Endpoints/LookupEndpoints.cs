@@ -43,21 +43,12 @@ public static class LookupEndpoints
             if (!DateOnly.TryParse(date, out var competitionDate))
                 return Results.BadRequest(new { error = "Invalid date format. Use yyyy-MM-dd." });
 
-            var dayRunners = db.Runners
+            var competitors = await db.Runners
                 .AsNoTracking()
-                .Where(r => r.CompetitionDate == competitionDate);
-
-            var competitors = await dayRunners.CountAsync();
-            var clubs = await dayRunners
-                .Where(r => r.ClubId > 0)
-                .Select(r => r.ClubId)
-                .Distinct()
+                .Where(r => r.CompetitionDate == competitionDate)
                 .CountAsync();
-            var classes = await dayRunners
-                .Where(r => r.ClassId > 0)
-                .Select(r => r.ClassId)
-                .Distinct()
-                .CountAsync();
+            var clubs = await db.Clubs.CountAsync();
+            var classes = await db.Classes.CountAsync();
 
             return Results.Ok(new LookupCountsResponse(competitors, clubs, classes));
         });
