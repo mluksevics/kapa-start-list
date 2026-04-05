@@ -49,8 +49,13 @@ class GateViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(GateUiState())
     val uiState: StateFlow<GateUiState> = _uiState.asStateFlow()
-    private val settings: StateFlow<AppSettings> = settingsDataStore.settings
+    val settings: StateFlow<AppSettings> = settingsDataStore.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings.DEFAULT)
+
+    /** Cached runner list from Room Flow — avoids querying DB every second. */
+    private var cachedRunners: List<RunnerEntity> = emptyList()
+    /** Cached class→startPlace map from Room Flow. */
+    private var cachedClassStartPlaces: Map<Int, Int> = emptyMap()
 
     val canUndo: StateFlow<Boolean> = repository.canUndo
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -61,7 +66,21 @@ class GateViewModel @Inject constructor(
     fun redo() { viewModelScope.launch { repository.redo() } }
 
     init {
-        // Clock tick
+        // Observe runners via Room Flow instead of querying every tick
+        viewModelScope.launch {
+            runnerDao.observeAll().collect { runners ->
+                cachedRunners = runners
+                updateCurrentMinuteRunners(System.currentTimeMillis())
+            }
+        }
+        // Observe class lookups for startPlace filtering
+        viewModelScope.launch {
+            lookupDao.observeAllClasses().collect { classes ->
+                cachedClassStartPlaces = classes.associate { it.id to it.startPlace }
+            }
+        }
+
+        // Clock tick — uses cached runners, no DB query
         viewModelScope.launch {
             while (true) {
                 val now = System.currentTimeMillis()
@@ -141,7 +160,7 @@ class GateViewModel @Inject constructor(
         val now = System.currentTimeMillis()
         val adjustedNow = now - (settings.value.prestartMinutes * 60_000L)
         val currentTod = (adjustedNow / 60_000).toInt() % (24 * 60)
-        val allRunners = filterRunnersByStartPlace(runnerDao.getAll())
+        val allRunners = filterRunnersByStartPlace(cachedRunners)
 
         // Find runner by SI card
         val matchedRunner = allRunners.firstOrNull { it.siCard == siCard }
@@ -174,29 +193,21 @@ class GateViewModel @Inject constructor(
             _uiState.update { it.copy(signal = GateSignal.GREEN) }
             delay(3000)
             resetSignal()
-        } else if (diffMinutes in -5..5) {
-            // ORANGE — within ±5 min; show details so referee can approve or reassign
+        } else {
+            // ORANGE — runner found but not in the current minute; show details so referee can approve or reassign
             _uiState.update { it.copy(
                 signal = GateSignal.ORANGE,
                 lastReadSiCard = siCard,
                 pendingApproveRunner = matchedRunner,
                 statusLine = "Wrong minute: SI $siCard → #${matchedRunner.startNumber} ${matchedRunner.name} ${matchedRunner.surname} [${matchedRunner.className}] (${if (diffMinutes > 0) "+$diffMinutes" else "$diffMinutes"} min)"
             ) }
-        } else {
-            // RED — found but too far from start time
-            _uiState.update { it.copy(
-                signal = GateSignal.RED,
-                lastReadSiCard = siCard,
-                pendingApproveRunner = null,
-                statusLine = "Wrong time: SI $siCard → #${matchedRunner.startNumber} ${matchedRunner.name} ${matchedRunner.surname} ($diffMinutes min off)"
-            ) }
         }
     }
 
-    private suspend fun updateCurrentMinuteRunners(nowMs: Long) {
+    private fun updateCurrentMinuteRunners(nowMs: Long) {
         val adjustedMs = nowMs - (settings.value.prestartMinutes * 60_000L)
         val currentTod = (adjustedMs / 60_000).toInt() % (24 * 60)
-        val all = filterRunnersByStartPlace(runnerDao.getAll())
+        val all = filterRunnersByStartPlace(cachedRunners)
         val current = all.filter { r ->
             (r.startTime / 60_000).toInt() % (24 * 60) == currentTod
         }.sortedBy { it.startNumber }
@@ -213,10 +224,9 @@ class GateViewModel @Inject constructor(
         ) }
     }
 
-    private suspend fun filterRunnersByStartPlace(runners: List<RunnerEntity>): List<RunnerEntity> {
+    private fun filterRunnersByStartPlace(runners: List<RunnerEntity>): List<RunnerEntity> {
         val sp = settings.value.startPlace
         if (sp == 0) return runners
-        val map = lookupDao.getAllClasses().associate { it.id to it.startPlace }
-        return runners.filter { map[it.classId] == sp }
+        return runners.filter { cachedClassStartPlaces[it.classId] == sp }
     }
 }

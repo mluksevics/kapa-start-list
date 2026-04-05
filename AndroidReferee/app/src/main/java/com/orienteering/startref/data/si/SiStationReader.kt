@@ -55,10 +55,11 @@ class SiStationReader @Inject constructor(
 
     private var ioManager: SerialInputOutputManager? = null
     private var port: UsbSerialPort? = null
-    private val executor = Executors.newSingleThreadExecutor()
+    private var executor = Executors.newSingleThreadExecutor()
 
-    // Accumulation buffer for parsing multi-byte SI protocol frames
+    // Accumulation buffer for parsing multi-byte SI protocol frames (capped to prevent unbounded growth)
     private val buffer = mutableListOf<Byte>()
+    private val maxBufferSize = 4096
 
     /**
      * Success sound on card read.
@@ -70,11 +71,9 @@ class SiStationReader @Inject constructor(
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             if (loudSound) {
                 audioManager.setStreamVolume(AudioManager.STREAM_ALARM, audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0)
-                ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
-                    .startTone(ToneGenerator.TONE_CDMA_ABBR_ALERT, 800)
+                playTone(AudioManager.STREAM_ALARM, ToneGenerator.TONE_CDMA_ABBR_ALERT, 800)
             } else {
-                ToneGenerator(AudioManager.STREAM_MUSIC, ToneGenerator.MAX_VOLUME)
-                    .startTone(ToneGenerator.TONE_PROP_ACK, 600)
+                playTone(AudioManager.STREAM_MUSIC, ToneGenerator.TONE_PROP_ACK, 600)
             }
         } catch (e: Exception) {
             debugLog.log("playSuccess failed: ${e.message}")
@@ -87,10 +86,17 @@ class SiStationReader @Inject constructor(
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             val stream = if (loudSound) AudioManager.STREAM_ALARM else AudioManager.STREAM_MUSIC
             if (loudSound) audioManager.setStreamVolume(stream, audioManager.getStreamMaxVolume(stream), 0)
-            ToneGenerator(stream, ToneGenerator.MAX_VOLUME).startTone(ToneGenerator.TONE_CDMA_HIGH_L, 800)
+            playTone(stream, ToneGenerator.TONE_CDMA_HIGH_L, 800)
         } catch (e: Exception) {
             debugLog.log("playError failed: ${e.message}")
         }
+    }
+
+    private fun playTone(stream: Int, tone: Int, durationMs: Int) {
+        val tg = ToneGenerator(stream, ToneGenerator.MAX_VOLUME)
+        tg.startTone(tone, durationMs)
+        // Release after tone finishes to avoid native resource leak
+        executor.submit { Thread.sleep(durationMs.toLong() + 50); tg.release() }
     }
 
     /**
@@ -115,6 +121,8 @@ class SiStationReader @Inject constructor(
      */
     fun start() {
         if (ioManager != null) return  // Already connected — idempotent
+
+        if (executor.isShutdown) executor = Executors.newSingleThreadExecutor()
 
         val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
         val availableDrivers = SiProber.get().findAllDrivers(usbManager)
@@ -189,6 +197,7 @@ class SiStationReader @Inject constructor(
         ioManager = null
         port = null
         buffer.clear()
+        executor.shutdownNow()
         _connectionState.value = SiConnectionState.DISCONNECTED
     }
 
@@ -216,6 +225,11 @@ class SiStationReader @Inject constructor(
         // Log raw hex so we can spot NAK (0x15) or unexpected responses
         debugLog.log("RX: ${data.joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }}")
         buffer.addAll(data.toList())
+        if (buffer.size > maxBufferSize) {
+            debugLog.log("Buffer overflow (${buffer.size} bytes), clearing")
+            buffer.clear()
+            return
+        }
 
         val buf = buffer.toMutableList()
         var i = 0

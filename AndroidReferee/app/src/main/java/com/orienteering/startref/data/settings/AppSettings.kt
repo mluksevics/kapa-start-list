@@ -17,10 +17,12 @@ data class AppSettings(
     val deviceName: String,           // identifies this device in lastModifiedBy
     val lastServerTimeUtc: Long,       // watermark for delta sync polling
     val siReaderDeviceKey: String,     // "vendorId:productId" or "" for auto (first found)
-    val loudSound: Boolean             // use STREAM_ALARM (ignores device volume) when true
+    val loudSound: Boolean,             // use STREAM_ALARM (ignores device volume) when true
+    val gateFontSize: Float
 ) {
     companion object {
         const val DEFAULT_FONT_SIZE = 16f
+        const val DEFAULT_GATE_FONT_SIZE = 34f
         const val DEVICE_NAME_PREFIX = "android-"
 
         fun generateDefaultDeviceName(): String {
@@ -44,7 +46,8 @@ data class AppSettings(
             deviceName = DEVICE_NAME_PREFIX + "pending",
             lastServerTimeUtc = 0L,
             siReaderDeviceKey = "",
-            loudSound = false
+            loudSound = false,
+            gateFontSize = DEFAULT_GATE_FONT_SIZE
         )
     }
 }

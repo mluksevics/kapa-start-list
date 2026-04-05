@@ -75,6 +75,7 @@ class StartListViewModel @Inject constructor(
     val autoScrollEnabled: StateFlow<Boolean> = _autoScrollEnabled.asStateFlow()
 
     private val _runnerFieldHighlights = MutableStateFlow<Map<Int, Set<String>>>(emptyMap())
+    private val highlightJobs = mutableMapOf<Int, kotlinx.coroutines.Job>()
 
     private val _highlightedStartNumber = MutableStateFlow<Int?>(null)
     val highlightedStartNumber: StateFlow<Int?> = _highlightedStartNumber.asStateFlow()
@@ -169,12 +170,12 @@ class StartListViewModel @Inject constructor(
                     for ((startNr, fields) in delta.runnerFieldHighlights) {
                         val newSet = (_runnerFieldHighlights.value[startNr] ?: emptySet()) + fields
                         _runnerFieldHighlights.value = _runnerFieldHighlights.value + (startNr to newSet)
-                        viewModelScope.launch {
+                        // Cancel previous timer for this runner, reset to 8s
+                        highlightJobs[startNr]?.cancel()
+                        highlightJobs[startNr] = viewModelScope.launch {
                             delay(8_000)
-                            val cur = _runnerFieldHighlights.value
-                            if (cur[startNr] == newSet) {
-                                _runnerFieldHighlights.value = cur.filterKeys { key -> key != startNr }
-                            }
+                            _runnerFieldHighlights.value = _runnerFieldHighlights.value - startNr
+                            highlightJobs.remove(startNr)
                         }
                     }
                 }
@@ -293,8 +294,11 @@ class StartListViewModel @Inject constructor(
         val s = settings.value
         if (s.soundEnabled) {
             try {
-                ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
-                    .startTone(ToneGenerator.TONE_PROP_BEEP, 300)
+                val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                am.setStreamVolume(AudioManager.STREAM_ALARM, am.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0)
+                val tg = ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
+                tg.startTone(ToneGenerator.TONE_CDMA_ABBR_ALERT, 800)
+                viewModelScope.launch { delay(850); tg.release() }
             } catch (_: Exception) {}
         }
         if (s.vibrationEnabled) {

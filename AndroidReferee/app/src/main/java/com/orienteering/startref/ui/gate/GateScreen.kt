@@ -46,6 +46,7 @@ private val clockFormatter = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(Zo
 @Composable
 fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
     val canUndo by viewModel.canUndo.collectAsStateWithLifecycle()
     val canRedo by viewModel.canRedo.collectAsStateWithLifecycle()
 
@@ -82,12 +83,16 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
             )
 
             LazyColumn(modifier = Modifier.weight(1f)) {
-                items(state.currentMinuteRunners) { runner ->
+                items(
+                    items = state.currentMinuteRunners,
+                    key = { it.startNumber }
+                ) { runner ->
                     RunnerGateRow(
                         runner = runner,
                         isStarted = runner.statusId == 2,
                         isJustMatched = runner.startNumber == state.lastMatchedRunner?.startNumber && state.signal == GateSignal.BRIGHT_GREEN,
                         clickable = state.rowsClickable,
+                        fontSize = settings.gateFontSize,
                         onClick = { viewModel.assignChipToRunner(runner) }
                     )
                 }
@@ -124,7 +129,7 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
             // Status line
             Text(
                 text = state.statusLine,
-                style = MaterialTheme.typography.bodyMedium,
+                fontSize = 42.sp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -202,6 +207,7 @@ private fun RunnerGateRow(
     isStarted: Boolean,       // statusId==2 from DB — persists across clock ticks
     isJustMatched: Boolean,   // bright flash for the current scan
     clickable: Boolean,
+    fontSize: Float = 34f,
     onClick: () -> Unit
 ) {
     val bgColor = when {
@@ -209,7 +215,7 @@ private fun RunnerGateRow(
         isStarted     -> Color(0xFF4CAF50)   // steady green — runner has started
         else          -> Color.Transparent
     }
-    val normalStyle = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.Bold)
+    val normalStyle = TextStyle(fontSize = fontSize.sp, fontWeight = FontWeight.Bold)
     val narrowStyle = normalStyle.copy(textGeometricTransform = TextGeometricTransform(scaleX = 0.7f))
     Row(
         modifier = Modifier

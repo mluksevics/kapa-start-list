@@ -16,6 +16,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -32,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,8 +44,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.orienteering.startref.BuildConfig
@@ -58,6 +65,8 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showClearConfirm by remember { mutableStateOf(false) }
     var showFinalClearConfirm by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var pendingDate by remember { mutableStateOf<LocalDate?>(null) }
 
     // Local form state — initialized once from the first real DataStore emission
     var apiBaseUrl by rememberSaveable { mutableStateOf("") }
@@ -105,6 +114,54 @@ fun SettingsScreen(
                 ) { Text("Continue") }
             },
             dismissButton = { TextButton(onClick = { showClearConfirm = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showDatePicker) {
+        val currentDate = LocalDate.parse(settings.competitionDate)
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = currentDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDatePicker = false
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val picked = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
+                        if (picked != LocalDate.now()) {
+                            pendingDate = picked
+                        } else {
+                            viewModel.updateCompetitionDate(picked.toString())
+                        }
+                    }
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (pendingDate != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDate = null },
+            title = { Text("Warning") },
+            text = { Text("You are switching to ${pendingDate}. The app will sync data for that date instead of today.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.updateCompetitionDate(pendingDate.toString())
+                        pendingDate = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Switch date") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDate = null }) { Text("Cancel") }
+            }
         )
     }
 
@@ -208,6 +265,42 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+            }
+
+            run {
+                val isToday = settings.competitionDate == LocalDate.now().toString()
+                val labelColor = if (isToday) MaterialTheme.colorScheme.primary else Color.Red
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Competition date" + if (!isToday) " (NOT TODAY)" else "",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = labelColor
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = settings.competitionDate,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (isToday) MaterialTheme.colorScheme.onSurface else Color.Red,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Button(onClick = { showDatePicker = true }) {
+                            Text("Change")
+                        }
+                        if (!isToday) {
+                            Button(
+                                onClick = { viewModel.updateCompetitionDate(LocalDate.now().toString()) },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Reset to today")
+                            }
+                        }
+                    }
+                }
             }
 
             SettingField(label = "Device name (sync / lastModifiedBy)") {
@@ -320,6 +413,23 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
                     )
                     Text("28", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+
+            SettingField(label = "Gate font size: ${settings.gateFontSize.toInt()} sp") {
+                Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("16", style = MaterialTheme.typography.labelSmall)
+                    androidx.compose.material3.Slider(
+                        value = settings.gateFontSize,
+                        onValueChange = { viewModel.updateGateFontSize(it) },
+                        valueRange = 16f..48f,
+                        steps = 31,
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                    )
+                    Text("48", style = MaterialTheme.typography.labelSmall)
                 }
             }
 

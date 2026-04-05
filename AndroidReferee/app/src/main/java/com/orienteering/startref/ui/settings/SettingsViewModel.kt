@@ -97,6 +97,14 @@ class SettingsViewModel @Inject constructor(
         settingsDataStore.updateLoudSound(value)
     }
 
+    fun updateCompetitionDate(value: String) = viewModelScope.launch {
+        settingsDataStore.updateCompetitionDate(value)
+    }
+
+    fun updateGateFontSize(value: Float) = viewModelScope.launch {
+        settingsDataStore.updateGateFontSize(value)
+    }
+
     fun reloadStartList() {
         viewModelScope.launch {
             _isLoading.value = true
