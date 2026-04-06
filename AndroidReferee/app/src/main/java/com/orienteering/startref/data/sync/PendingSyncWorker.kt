@@ -42,7 +42,7 @@ class PendingSyncWorker @AssistedInject constructor(
                     classId = body.optInt("classId").takeIf { body.has("classId") },
                     clubId = body.optInt("clubId").takeIf { body.has("clubId") },
                     startTime = body.optString("startTime").takeIf { body.has("startTime") },
-                    lastModifiedAtMs = body.getLong("lastModifiedAtMs"),
+                    lastModifiedAtMs = settings.serverNow(),
                     source = settings.deviceName,
                     settings = settings
                 )
