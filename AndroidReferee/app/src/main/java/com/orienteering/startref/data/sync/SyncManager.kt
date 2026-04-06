@@ -217,12 +217,14 @@ class SyncManager @Inject constructor(
     private suspend fun syncClassLookups(settings: com.orienteering.startref.data.settings.AppSettings): Int {
         val classes = apiClient.getClasses(settings)
         if (classes.isEmpty()) return 0
-        lookupDao.deleteAllClasses()
-        lookupDao.insertClasses(
-            classes.map { item ->
-                ClassLookupEntity(id = item.id, name = item.name, startPlace = item.startPlace)
-            }
-        )
+        db.withTransaction {
+            lookupDao.deleteAllClasses()
+            lookupDao.insertClasses(
+                classes.map { item ->
+                    ClassLookupEntity(id = item.id, name = item.name, startPlace = item.startPlace)
+                }
+            )
+        }
         var changed = 0
         classes.forEach { item ->
             changed += runnerDao.updateClassNameByClassId(item.id, item.name)
@@ -233,10 +235,12 @@ class SyncManager @Inject constructor(
     private suspend fun syncClubLookups(settings: com.orienteering.startref.data.settings.AppSettings): Int {
         val clubs = apiClient.getClubs(settings)
         if (clubs.isEmpty()) return 0
-        lookupDao.deleteAllClubs()
-        lookupDao.insertClubs(
-            clubs.map { item -> ClubLookupEntity(id = item.id, name = item.name) }
-        )
+        db.withTransaction {
+            lookupDao.deleteAllClubs()
+            lookupDao.insertClubs(
+                clubs.map { item -> ClubLookupEntity(id = item.id, name = item.name) }
+            )
+        }
         var changed = 0
         clubs.forEach { item ->
             changed += runnerDao.updateClubNameByClubId(item.id, item.name)
