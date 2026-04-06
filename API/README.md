@@ -17,6 +17,12 @@ All mutation endpoints require the `X-Api-Key` header. GET endpoints are open.
 | `GET` | `/api/competitions/{date}/runners[?changedSince=ISO]` | Full or delta fetch; returns `serverTimeUtc` and runner rows (see `changedFields` below) |
 | `DELETE` | `/api/competitions/{date}/runners` | Clear all runners for a date |
 
+### Utility
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/time` | Returns current server UTC timestamp (`serverTimeUtc`). No auth required. Used by Android for NTP-style clock sync. |
+
 **GET runners — `changedFields` (delta pulls only):** When `changedSince` is present, each runner object may include `changedFields`: a string array of logical column names (`SiChipNo`, `Name`, `Surname`, `ClassId`, `ClubId`, `Country`, `StartPlace`, `StartTime`, `StatusId`) that had a changelog entry with `ChangedAtUtc` after the watermark. Names match `PATCH` / bulk upload audit log field names. If a runner appears in the delta but has no matching changelog rows in that window, `changedFields` is omitted (clients fall back to comparing full row values). When `changedSince` is omitted (full fetch), `changedFields` is omitted.
 
 ### Reference data
@@ -47,6 +53,8 @@ ChangeLogEntry (id identity, competitionDate, startNumber, fieldName, oldValue, 
 ### `PATCH` (Android / referee)
 
 Any valid `statusId` 1–3 is stored as sent (including **Started/DNS → Registered**), subject to `lastModifiedUtc` conflict rules. Referee corrections propagate to the API and other clients on pull.
+
+**Conflict check:** `PATCH` is rejected with `409 Conflict` only if `request.lastModifiedUtc` is more than **5 seconds older** than the server's stored `LastModifiedUtc`. This tolerance absorbs minor clock drift between devices. Timestamps on Android are kept in sync with the server via the lightweight `/api/time` endpoint (NTP-style half-RTT compensation) so genuine conflicts are still caught.
 
 ### `PUT` bulk upload (Desktop / OE12 scan)
 

@@ -100,7 +100,11 @@ Every ~30 s: `GET /runners?changedSince={watermark}` → merge all fields into R
 
 ### Android → API (PATCH)
 
-Every user action (start, DNS, edit) is immediately PATCHed to the API. Failed PATCHes are queued locally in `pending_sync` and retried by WorkManager. **Flush pending updates** in Android settings replays the queue immediately.
+Every user action (start, DNS, edit) is immediately PATCHed to the API. Failed PATCHes are queued locally in `pending_sync` and retried by WorkManager. The sync circle (toolbar on start list, bottom-right on gate) shows `sent/total` and triggers an immediate retry on tap.
+
+### Android clock sync
+
+Before each delta poll the app hits `GET /api/time` (lightweight, no DB) and computes a server clock offset via NTP-style half-RTT compensation. All PATCH timestamps use `localMs + offset` so the API's last-write-wins check compares server-equivalent times. The offset is shown next to the clock in the start list header (red if > 500 ms).
 
 ### Android Force Pull
 

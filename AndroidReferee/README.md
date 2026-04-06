@@ -38,6 +38,16 @@ Referees can toggle **Started** and **DNS** off (back to **Registered**); change
 - `className` is **never** updated from the server — it is immutable after initial upload
 - Watermark (`serverTimeUtc`) is stored in DataStore
 
+### Clock sync
+
+Before each delta poll, the app calls `GET /api/time` — a lightweight endpoint with no DB query. The response is used to compute a **server clock offset** using NTP-style half-RTT compensation:
+
+```
+offset = serverTime − (t_before + t_after) / 2
+```
+
+This offset is stored in DataStore and applied to every PATCH timestamp (`serverNow() = localMs + offset`), ensuring the API's last-write-wins conflict check compares server-equivalent times. The current offset and RTT are shown in the debug tab on every poll. The start list header displays the offset next to the clock, turning **red** if it exceeds 500 ms.
+
 ### Class changes in Edit runner
 
 - Most classes: class dropdown is **disabled** (read-only).
@@ -50,6 +60,8 @@ Tap the **SI chip** column on the start list to open a quick dialog with an empt
 
 - Every status change or edit is immediately PATCHed to the API
 - On failure it is queued in the local `pending_sync` table and retried by WorkManager
+- Retries use a **fresh `serverNow()` timestamp** (not the original action time) so stale entries don't keep failing with `409`
+- The `sent/total` circle in the toolbar (start list) and bottom-right overlay (gate) shows queue status; tapping it triggers an immediate retry
 
 ### Gate screen — colour signals
 
