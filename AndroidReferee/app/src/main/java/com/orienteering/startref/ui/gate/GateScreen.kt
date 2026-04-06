@@ -129,7 +129,7 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
             // Status line
             Text(
                 text = state.statusLine,
-                fontSize = 42.sp,
+                fontSize = 21.sp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surfaceVariant)

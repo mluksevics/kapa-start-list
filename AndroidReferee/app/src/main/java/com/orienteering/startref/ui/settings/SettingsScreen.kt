@@ -234,7 +234,7 @@ fun SettingsScreen(
                     onClick = { viewModel.forcePush() },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Flush pending updates")
+                    Text("Push pending updates")
                 }
             }
 
