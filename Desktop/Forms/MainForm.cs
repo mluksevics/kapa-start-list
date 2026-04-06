@@ -19,6 +19,8 @@ public partial class MainForm : Form
     private bool _pushActionsEnabled;
     private bool _suppressDbDateChange;
     private bool _advancedExpanded;
+    private System.Windows.Forms.Timer? _midnightCheckTimer;
+    private DateOnly _lastKnownDate;
 
     private sealed record EtapItem(int DayNo, string Name, string Date)
     {
@@ -39,7 +41,7 @@ public partial class MainForm : Form
 
         _settings = AppSettings.Load();
         DbBridgeService.SetCodePage(_settings.DbCodePage);
-        _logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "StartRefSync.log");
+        _logFilePath = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath!)!, "StartRefSync.log");
 
         _api = new ApiClient(() => _settings, AppendLog);
         var dbIsamRepository = new DbIsamRepository(AppendLog);
@@ -56,6 +58,11 @@ public partial class MainForm : Form
 
         ApplyAdvancedLayout();
         UpdateStatusLabel("Idle");
+
+        _lastKnownDate = DateOnly.FromDateTime(DateTime.Today);
+        _midnightCheckTimer = new System.Windows.Forms.Timer { Interval = 30_000 };
+        _midnightCheckTimer.Tick += MidnightCheckTimer_Tick;
+        _midnightCheckTimer.Start();
     }
 
     private void btnAdvancedToggle_Click(object? sender, EventArgs e)
@@ -941,6 +948,34 @@ public partial class MainForm : Form
         if (DateOnly.TryParse(_settings.CompetitionDate, out configured))
             return configured;
         return DateOnly.FromDateTime(DateTime.Today);
+    }
+
+    private void MidnightCheckTimer_Tick(object? sender, EventArgs e)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        if (today == _lastKnownDate) return;
+        _lastKnownDate = today;
+
+        _midnightCheckTimer?.Stop(); // pause while dialog is open
+        var result = MessageBox.Show(
+            $"It is past midnight. The competition date is still {_settings.CompetitionDate}.\n\n" +
+            $"Switch to the new date ({today:yyyy-MM-dd})?",
+            "Date changed",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        if (result == DialogResult.Yes)
+        {
+            _suppressDbDateChange = true;
+            dtpDbDate.Value = today.ToDateTime(TimeOnly.MinValue);
+            _suppressDbDateChange = false;
+            _settings.CompetitionDate = today.ToString("yyyy-MM-dd");
+            _settings.Save();
+            AppendLog($"{DateTime.Now:HH:mm:ss} Competition date auto-switched to {today:yyyy-MM-dd} after midnight.");
+            UpdateDbDateWarning();
+            LoadStagesFromDb();
+        }
+        _midnightCheckTimer?.Start();
     }
 
     private void UpdateDbDateWarning()

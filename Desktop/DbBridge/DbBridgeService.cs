@@ -21,7 +21,7 @@ public class DbBridgeService : IDisposable
     public bool IsOpen => _ctx != IntPtr.Zero;
 
     public static string GlobalDllLogPath =>
-        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DbBridge_dll.log");
+        Path.Combine(Path.GetDirectoryName(Environment.ProcessPath!)!, "DbBridge_dll.log");
 
     public static string DbErrorLogPath(string dataDir, DateTime? date = null)
     {

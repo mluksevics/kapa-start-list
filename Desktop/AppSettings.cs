@@ -28,7 +28,7 @@ public class AppSettings
         LastServerTimeByDate[date] = value;
 
     private static readonly string SettingsPath =
-        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+        Path.Combine(Path.GetDirectoryName(Environment.ProcessPath!)!, "settings.json");
 
     public static AppSettings Load()
     {
