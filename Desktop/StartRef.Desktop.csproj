@@ -31,6 +31,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Properties\PublishProfiles\SingleFile-win-x86.pubxml" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="Library\DbBridge.dll">
       <Link>DbBridge.dll</Link>
       <TargetPath>DbBridge.dll</TargetPath>
