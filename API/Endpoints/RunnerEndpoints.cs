@@ -448,7 +448,7 @@ public static class RunnerEndpoints
 
             if (anyChange)
             {
-                runner.LastModifiedUtc = utcNow;
+                runner.LastModifiedUtc = request.LastModifiedUtc;
                 runner.LastModifiedBy = request.Source;
                 db.ChangeLogEntries.AddRange(changeLogEntries);
                 await db.SaveChangesAsync();
