@@ -137,6 +137,17 @@ fun StartListScreen(
                                 clockFormatter.format(Instant.ofEpochMilli(adjustedTimeMs)),
                                 style = MaterialTheme.typography.titleMedium
                             )
+                            val offset = settings.serverClockOffsetMs
+                            if (offset != 0L) {
+                                val sign = if (offset > 0) "+" else ""
+                                Text(
+                                    text = "${sign}${offset}ms",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (kotlin.math.abs(offset) > 500) Color.Red
+                                            else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                            }
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(settings.headerText, style = MaterialTheme.typography.titleMedium)
                         }
