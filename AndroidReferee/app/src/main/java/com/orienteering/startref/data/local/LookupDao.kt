@@ -30,4 +30,7 @@ interface LookupDao {
 
     @Query("SELECT * FROM class_lookups")
     suspend fun getAllClasses(): List<ClassLookupEntity>
+
+    @Query("SELECT * FROM club_lookups")
+    suspend fun getAllClubs(): List<ClubLookupEntity>
 }

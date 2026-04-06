@@ -89,8 +89,12 @@ class SyncManager @Inject constructor(
                     }
                 }
             }.mapValues { it.value.toSet() }
-            val classNamesChanged = syncClassLookups(settings)
-            val clubNamesChanged = syncClubLookups(settings)
+            val knownClassIds = lookupDao.getAllClasses().map { it.id }.toSet()
+            val knownClubIds = lookupDao.getAllClubs().map { it.id }.toSet()
+            val missingClass = result.runners.any { it.classId !in knownClassIds }
+            val missingClub = result.runners.any { it.clubId !in knownClubIds }
+            val classNamesChanged = if (missingClass) syncClassLookups(settings) else 0
+            val clubNamesChanged = if (missingClub) syncClubLookups(settings) else 0
             settingsDataStore.updateLastServerTimeUtc(result.serverTimeUtc)
             log.log("Poll done: runners=$runnersChanged classes=$classNamesChanged clubs=$clubNamesChanged")
             if (runnersChanged > 0 || classNamesChanged > 0 || clubNamesChanged > 0 || fieldHighlights.isNotEmpty()) {
