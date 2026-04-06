@@ -118,7 +118,8 @@ fun StartListScreen(
                             modifier = Modifier
                                 .padding(start = 8.dp)
                                 .size(40.dp)
-                                .background(Color.White, shape = CircleShape),
+                                .background(Color.White, shape = CircleShape)
+                                .clickable { viewModel.forcePush() },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(

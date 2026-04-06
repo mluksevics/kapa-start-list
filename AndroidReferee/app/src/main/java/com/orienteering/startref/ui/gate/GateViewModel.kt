@@ -2,6 +2,9 @@ package com.orienteering.startref.ui.gate
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.orienteering.startref.data.local.LookupDao
 import com.orienteering.startref.data.local.RunnerDao
 import com.orienteering.startref.data.local.entity.RunnerEntity
@@ -10,6 +13,7 @@ import com.orienteering.startref.data.settings.AppSettings
 import com.orienteering.startref.data.settings.SettingsDataStore
 import com.orienteering.startref.data.si.SiConnectionState
 import com.orienteering.startref.data.si.SiStationReader
+import com.orienteering.startref.data.sync.PendingSyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +48,7 @@ class GateViewModel @Inject constructor(
     private val lookupDao: LookupDao,
     private val repository: StartListRepository,
     settingsDataStore: SettingsDataStore,
+    private val workManager: WorkManager,
     private val siReader: SiStationReader
 ) : ViewModel() {
 
@@ -61,9 +66,15 @@ class GateViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val canRedo: StateFlow<Boolean> = repository.canRedo
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val syncCounts: StateFlow<Pair<Int, Int>> = repository.observeSyncCounts()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0 to 0)
 
     fun undo() { viewModelScope.launch { repository.undo() } }
     fun redo() { viewModelScope.launch { repository.redo() } }
+    fun forcePush() {
+        val request = OneTimeWorkRequestBuilder<PendingSyncWorker>().build()
+        workManager.enqueueUniqueWork("forcePush", ExistingWorkPolicy.REPLACE, request)
+    }
 
     init {
         // Observe runners via Room Flow instead of querying every tick

@@ -49,6 +49,7 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val canUndo by viewModel.canUndo.collectAsStateWithLifecycle()
     val canRedo by viewModel.canRedo.collectAsStateWithLifecycle()
+    val syncCounts by viewModel.syncCounts.collectAsStateWithLifecycle()
 
     Scaffold { paddingValues ->
         Box(
@@ -136,6 +137,23 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
                     .padding(12.dp)
             )
         } // end Column
+
+        val (sent, total) = syncCounts
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp)
+                .size(48.dp)
+                .background(Color.White, shape = CircleShape)
+                .clickable { viewModel.forcePush() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "$sent/$total",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (sent < total) Color(0xFFE65100) else Color(0xFF2E7D32)
+            )
+        }
 
         UndoRedoButtons(
             canUndo = canUndo,
