@@ -97,6 +97,22 @@ class ApiClient(
         }
     }
 
+    /** GET /api/time — returns server UTC epoch ms, or null on failure */
+    suspend fun getServerTime(settings: AppSettings): Long? = withContext(Dispatchers.IO) {
+        val baseUrl = settings.apiBaseUrl.trimEnd('/')
+        if (baseUrl.isBlank()) return@withContext null
+        try {
+            val request = Request.Builder().url("$baseUrl/api/time").get().build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                val json = JSONObject(response.body!!.string())
+                parseIso(json.getString("serverTimeUtc"))
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /** GET /api/competitions/{date}/runners?changedSince=ISO */
     suspend fun getRunners(
         date: String,

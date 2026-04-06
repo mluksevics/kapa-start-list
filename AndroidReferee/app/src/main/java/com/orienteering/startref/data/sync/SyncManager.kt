@@ -62,6 +62,15 @@ class SyncManager @Inject constructor(
         try {
             val settings = settingsDataStore.settings.first()
             val changedSince = settings.lastServerTimeUtc.takeIf { it > 0 }
+            val tsBefore = System.currentTimeMillis()
+            val serverTimeMs = apiClient.getServerTime(settings)
+            val tsAfter = System.currentTimeMillis()
+            if (serverTimeMs != null) {
+                val offset = serverTimeMs - (tsBefore + tsAfter) / 2
+                settingsDataStore.updateServerClockOffsetMs(offset)
+                log.log("Time sync: offset=${offset}ms RTT=${tsAfter - tsBefore}ms")
+            }
+
             log.log("Poll: GET runners (changedSince=${if (changedSince != null) "yes" else "full"})")
             val t0 = System.currentTimeMillis()
             val result = apiClient.getRunners(settings.competitionDate, changedSince, settings) ?: run {
@@ -83,7 +92,6 @@ class SyncManager @Inject constructor(
             val classNamesChanged = syncClassLookups(settings)
             val clubNamesChanged = syncClubLookups(settings)
             settingsDataStore.updateLastServerTimeUtc(result.serverTimeUtc)
-            settingsDataStore.updateServerClockOffsetMs(result.serverTimeUtc - System.currentTimeMillis())
             log.log("Poll done: runners=$runnersChanged classes=$classNamesChanged clubs=$clubNamesChanged")
             if (runnersChanged > 0 || classNamesChanged > 0 || clubNamesChanged > 0 || fieldHighlights.isNotEmpty()) {
                 _syncDeltas.tryEmit(
@@ -121,7 +129,6 @@ class SyncManager @Inject constructor(
             val classNamesChanged = syncClassLookups(settings)
             val clubNamesChanged = syncClubLookups(settings)
             settingsDataStore.updateLastServerTimeUtc(result.serverTimeUtc)
-            settingsDataStore.updateServerClockOffsetMs(result.serverTimeUtc - System.currentTimeMillis())
             log.log("Full sync done: ${entities.size} runners, classes=$classNamesChanged clubs=$clubNamesChanged")
             _syncDeltas.tryEmit(
                 SyncDelta(

@@ -8,6 +8,9 @@ public static class RootEndpoints
 {
     public static void MapRootEndpoints(this WebApplication app)
     {
+        app.MapGet("/api/time", () =>
+            Results.Ok(new { serverTimeUtc = DateTimeOffset.UtcNow }));
+
         app.MapGet("/", async (AppDbContext db) =>
         {
             var competitions = await db.Competitions
