@@ -227,6 +227,7 @@ class StartListRepository @Inject constructor(
         )
 
         val body = JSONObject(fullPayload)
+        val t0 = System.currentTimeMillis()
         val error = apiClient.patchRunner(
             date = competitionDate,
             startNumber = startNumber,
@@ -241,12 +242,13 @@ class StartListRepository @Inject constructor(
             source = settings.deviceName,
             settings = settings
         )
+        val ms = System.currentTimeMillis() - t0
         if (error == null) {
             pendingSyncDao.markSent(id)
-            log.log("Push #$startNumber OK")
+            log.log("Push #$startNumber OK (${ms}ms)")
         } else {
             pendingSyncDao.markFailed(id)
-            log.log("Push #$startNumber FAILED: $error")
+            log.log("Push #$startNumber FAILED: $error (${ms}ms)")
         }
     }
 

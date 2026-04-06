@@ -32,6 +32,7 @@ class PendingSyncWorker @AssistedInject constructor(
             log.log("Push: ${pending.size} pending update(s)")
             for (entity in pending) {
                 val body = JSONObject(entity.payload)
+                val t0 = System.currentTimeMillis()
                 val error = apiClient.patchRunner(
                     date = entity.competitionDate,
                     startNumber = entity.startNumber,
@@ -46,12 +47,13 @@ class PendingSyncWorker @AssistedInject constructor(
                     source = settings.deviceName,
                     settings = settings
                 )
+                val ms = System.currentTimeMillis() - t0
                 if (error == null) {
                     pendingSyncDao.markSent(entity.id)
-                    log.log("Push #${entity.startNumber} OK")
+                    log.log("Push #${entity.startNumber} OK (${ms}ms)")
                 } else {
                     pendingSyncDao.markFailed(entity.id)
-                    log.log("Push #${entity.startNumber} FAILED: $error (attempt ${runAttemptCount + 1})")
+                    log.log("Push #${entity.startNumber} FAILED: $error (${ms}ms, attempt ${runAttemptCount + 1})")
                     allSucceeded = false
                 }
             }

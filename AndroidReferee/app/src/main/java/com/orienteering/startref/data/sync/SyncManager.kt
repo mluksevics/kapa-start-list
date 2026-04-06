@@ -63,10 +63,12 @@ class SyncManager @Inject constructor(
             val settings = settingsDataStore.settings.first()
             val changedSince = settings.lastServerTimeUtc.takeIf { it > 0 }
             log.log("Poll: GET runners (changedSince=${if (changedSince != null) "yes" else "full"})")
+            val t0 = System.currentTimeMillis()
             val result = apiClient.getRunners(settings.competitionDate, changedSince, settings) ?: run {
-                log.log("Poll: no response from server")
+                log.log("Poll: no response from server (${System.currentTimeMillis() - t0}ms)")
                 return
             }
+            log.log("GET runners: ${System.currentTimeMillis() - t0}ms")
 
             val runnersChanged = result.runners.size
             val fieldHighlights = buildMap<Int, MutableSet<String>> {
@@ -105,8 +107,10 @@ class SyncManager @Inject constructor(
         try {
             val settings = settingsDataStore.settings.first()
             log.log("Full sync: GET all runners")
+            val t0 = System.currentTimeMillis()
             val result = apiClient.getRunners(settings.competitionDate, null, settings)
                 ?: throw IllegalStateException("No response from API – check API URL and competition date in Settings")
+            log.log("GET runners: ${System.currentTimeMillis() - t0}ms")
 
             val entities = result.runners.map { it.toEntity(settings.competitionDate) }
             db.withTransaction {
@@ -217,7 +221,9 @@ class SyncManager @Inject constructor(
     }
 
     private suspend fun syncClassLookups(settings: com.orienteering.startref.data.settings.AppSettings): Int {
+        val t0 = System.currentTimeMillis()
         val classes = apiClient.getClasses(settings)
+        log.log("GET classes: ${System.currentTimeMillis() - t0}ms")
         if (classes.isEmpty()) return 0
         db.withTransaction {
             lookupDao.deleteAllClasses()
@@ -235,7 +241,9 @@ class SyncManager @Inject constructor(
     }
 
     private suspend fun syncClubLookups(settings: com.orienteering.startref.data.settings.AppSettings): Int {
+        val t0 = System.currentTimeMillis()
         val clubs = apiClient.getClubs(settings)
+        log.log("GET clubs: ${System.currentTimeMillis() - t0}ms")
         if (clubs.isEmpty()) return 0
         db.withTransaction {
             lookupDao.deleteAllClubs()

@@ -377,8 +377,8 @@ public static class RunnerEndpoints
             if (runner is null)
                 return Results.NotFound(new { error = $"Runner {startNumber} not found for {date}." });
 
-            // Last-write-wins: reject if incoming is older than server
-            if (request.LastModifiedUtc < runner.LastModifiedUtc)
+            // Last-write-wins: reject only if incoming is more than 10 seconds older than server
+            if (request.LastModifiedUtc < runner.LastModifiedUtc - TimeSpan.FromSeconds(10))
             {
                 return Results.Conflict(new PatchRunnerResponse(
                     startNumber,
