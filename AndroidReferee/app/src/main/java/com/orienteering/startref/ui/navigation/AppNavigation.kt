@@ -2,6 +2,7 @@ package com.orienteering.startref.ui.navigation
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.SensorDoor
 import androidx.compose.material.icons.filled.Settings
@@ -33,6 +34,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.orienteering.startref.ui.debug.DebugScreen
 import com.orienteering.startref.ui.gate.GateScreen
+import com.orienteering.startref.ui.help.HelpScreen
 import com.orienteering.startref.ui.settings.SettingsScreen
 import com.orienteering.startref.ui.settings.SettingsViewModel
 import com.orienteering.startref.ui.startlist.StartListScreen
@@ -136,6 +138,18 @@ fun AppNavigation() {
                     icon = { Icon(Icons.Default.BugReport, contentDescription = "Debug") },
                     label = { Text("Debug") }
                 )
+                NavigationBarItem(
+                    selected = currentDestination?.hierarchy?.any { it.route == "help" } == true,
+                    onClick = {
+                        navController.navigate("help") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    icon = { Icon(Icons.Default.HelpOutline, contentDescription = "Help") },
+                    label = { Text("Help") }
+                )
             }
         }
     ) { innerPadding ->
@@ -155,6 +169,9 @@ fun AppNavigation() {
             }
             composable("debug") {
                 DebugScreen()
+            }
+            composable("help") {
+                HelpScreen()
             }
         }
     }
