@@ -16,10 +16,13 @@ data class AppSettings(
     val competitionDate: String,      // ISO date yyyy-MM-dd, defaults to today
     val deviceName: String,           // identifies this device in lastModifiedBy
     val lastServerTimeUtc: Long,       // watermark for delta sync polling
+    val serverClockOffsetMs: Long,     // server.currentTimeMs - local.currentTimeMs at last poll
     val siReaderDeviceKey: String,     // "vendorId:productId" or "" for auto (first found)
     val loudSound: Boolean,             // use STREAM_ALARM (ignores device volume) when true
     val gateFontSize: Float
 ) {
+    fun serverNow(): Long = System.currentTimeMillis() + serverClockOffsetMs
+
     companion object {
         const val DEFAULT_FONT_SIZE = 16f
         const val DEFAULT_GATE_FONT_SIZE = 34f
@@ -45,6 +48,7 @@ data class AppSettings(
             competitionDate = LocalDate.now().toString(),
             deviceName = DEVICE_NAME_PREFIX + "pending",
             lastServerTimeUtc = 0L,
+            serverClockOffsetMs = 0L,
             siReaderDeviceKey = "",
             loudSound = false,
             gateFontSize = DEFAULT_GATE_FONT_SIZE

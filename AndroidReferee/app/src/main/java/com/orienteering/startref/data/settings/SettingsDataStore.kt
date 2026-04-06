@@ -36,6 +36,7 @@ class SettingsDataStore @Inject constructor(
         val COMPETITION_DATE = stringPreferencesKey("competition_date")
         val DEVICE_NAME = stringPreferencesKey("device_name")
         val LAST_SERVER_TIME_UTC = longPreferencesKey("last_server_time_utc")
+        val SERVER_CLOCK_OFFSET_MS = longPreferencesKey("server_clock_offset_ms")
         val SI_READER_DEVICE_KEY = stringPreferencesKey("si_reader_device_key")
         val LOUD_SOUND = booleanPreferencesKey("loud_sound")
         val GATE_FONT_SIZE = floatPreferencesKey("gate_font_size")
@@ -56,6 +57,7 @@ class SettingsDataStore @Inject constructor(
             deviceName = prefs[Keys.DEVICE_NAME]?.takeIf { it.isNotBlank() }
                 ?: AppSettings.DEFAULT.deviceName,
             lastServerTimeUtc = prefs[Keys.LAST_SERVER_TIME_UTC] ?: 0L,
+            serverClockOffsetMs = prefs[Keys.SERVER_CLOCK_OFFSET_MS] ?: 0L,
             siReaderDeviceKey = prefs[Keys.SI_READER_DEVICE_KEY] ?: "",
             loudSound = prefs[Keys.LOUD_SOUND] ?: false,
             gateFontSize = prefs[Keys.GATE_FONT_SIZE] ?: AppSettings.DEFAULT_GATE_FONT_SIZE
@@ -83,6 +85,7 @@ class SettingsDataStore @Inject constructor(
         }
     }
     suspend fun updateLastServerTimeUtc(value: Long) = context.dataStore.edit { it[Keys.LAST_SERVER_TIME_UTC] = value }
+    suspend fun updateServerClockOffsetMs(value: Long) = context.dataStore.edit { it[Keys.SERVER_CLOCK_OFFSET_MS] = value }
     suspend fun updateSiReaderDeviceKey(value: String) = context.dataStore.edit { it[Keys.SI_READER_DEVICE_KEY] = value }
     suspend fun updateLoudSound(value: Boolean) = context.dataStore.edit { it[Keys.LOUD_SOUND] = value }
     suspend fun updateGateFontSize(value: Float) = context.dataStore.edit { it[Keys.GATE_FONT_SIZE] = value }

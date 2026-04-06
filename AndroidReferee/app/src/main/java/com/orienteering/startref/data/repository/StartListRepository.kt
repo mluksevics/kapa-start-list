@@ -104,7 +104,7 @@ class StartListRepository @Inject constructor(
     /** Restores a runner to the DB and syncs without recording to undo stack. */
     private suspend fun restore(runner: RunnerEntity) {
         val settings = settingsDataStore.settings.first()
-        val now = System.currentTimeMillis()
+        val now = settings.serverNow()
         val restored = runner.copy(lastModifiedAt = now, lastModifiedBy = settings.deviceName)
         runnerDao.update(restored)
         enqueuePatch(
@@ -123,7 +123,7 @@ class StartListRepository @Inject constructor(
     private suspend fun setStatus(startNumber: Int, statusId: Int) {
         val settings = settingsDataStore.settings.first()
         val runner = runnerDao.getByStartNumber(startNumber) ?: return
-        val now = System.currentTimeMillis()
+        val now = settings.serverNow()
         val updated = runner.copy(
             statusId = statusId,
             checkedInAt = if (statusId == 2) now else runner.checkedInAt,
@@ -146,7 +146,7 @@ class StartListRepository @Inject constructor(
     suspend fun updateSiCardOnly(startNumber: Int, siCard: String) {
         val settings = settingsDataStore.settings.first()
         val runner = runnerDao.getByStartNumber(startNumber) ?: return
-        val now = System.currentTimeMillis()
+        val now = settings.serverNow()
         val updated = runner.copy(
             siCard = siCard,
             lastModifiedAt = now,
@@ -167,7 +167,7 @@ class StartListRepository @Inject constructor(
     suspend fun updateRunner(runner: RunnerEntity) {
         val settings = settingsDataStore.settings.first()
         val existing = runnerDao.getByStartNumber(runner.startNumber)
-        val now = System.currentTimeMillis()
+        val now = settings.serverNow()
         val updated = runner.copy(lastModifiedAt = now, lastModifiedBy = settings.deviceName)
         if (existing != null) undoRedoStack.record(existing, updated)
         runnerDao.update(updated)
