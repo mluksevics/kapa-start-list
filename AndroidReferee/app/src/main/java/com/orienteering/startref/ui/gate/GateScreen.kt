@@ -139,31 +139,32 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
         } // end Column
 
         val (sent, total) = syncCounts
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(16.dp)
-                .size(48.dp)
-                .background(Color.White, shape = CircleShape)
-                .clickable { viewModel.forcePush() },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "$sent/$total",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (sent < total) Color(0xFFE65100) else Color(0xFF2E7D32)
-            )
-        }
-
-        UndoRedoButtons(
-            canUndo = canUndo,
-            canRedo = canRedo,
-            onUndo = { viewModel.undo() },
-            onRedo = { viewModel.redo() },
+        Row(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp)
-        )
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(Color.White, shape = CircleShape)
+                    .clickable { viewModel.forcePush() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "$sent/$total",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (sent < total) Color(0xFFE65100) else Color(0xFF2E7D32)
+                )
+            }
+            UndoRedoButtons(
+                canUndo = canUndo,
+                canRedo = canRedo,
+                onUndo = { viewModel.undo() },
+                onRedo = { viewModel.redo() }
+            )
+        }
         } // end Box
     }
 }
