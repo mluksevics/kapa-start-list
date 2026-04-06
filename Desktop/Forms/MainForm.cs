@@ -598,6 +598,12 @@ public partial class MainForm : Form
         _settings.Save();
     }
 
+    private void btnHelp_Click(object sender, EventArgs e)
+    {
+        using var dlg = new HelpForm();
+        dlg.ShowDialog(this);
+    }
+
     private void btnEditApi_Click(object sender, EventArgs e)
     {
         using var dlg = new SettingsDialog(_settings);

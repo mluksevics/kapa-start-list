@@ -22,7 +22,7 @@ partial class MainForm
     private Label lblIntervalUnit;
     private Label lblLastSyncCaption, lblLastSync;
     private CheckBox chkTestMode;
-    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnDeleteTodayData, btnResetDayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, btnAdvancedToggle;
+    private Button btnSyncNow, btnForcePush, btnForcePushRange, btnPushAllChanges, btnPushClubs, btnPushClasses, btnPullPast, btnDeleteTodayData, btnResetDayData, btnDbExplorer, btnPeekWebApi, btnCancelSync, btnAdvancedToggle, btnHelp;
     private CheckBox chkAutoPush;
     private NumericUpDown nudAutoPushInterval;
     private Label lblAutoPushIntervalCaption, lblAutoPushIntervalUnit, lblLastAutoPushCaption, lblLastAutoPush;
@@ -240,6 +240,15 @@ partial class MainForm
             Size = new System.Drawing.Size(118, btnRowH)
         };
         btnPeekWebApi.Click += btnPeekWebApi_Click;
+        xAct += 118 + 4;
+
+        btnHelp = new Button
+        {
+            Text = "Help",
+            Location = new System.Drawing.Point(xAct, yAct),
+            Size = new System.Drawing.Size(52, btnRowH)
+        };
+        btnHelp.Click += btnHelp_Click;
 
         int yAdv = yAct + btnRowH + 4;
         btnAdvancedToggle = new Button
@@ -359,7 +368,7 @@ partial class MainForm
             chkAutoPush, lblAutoPushIntervalCaption, nudAutoPushInterval, lblAutoPushIntervalUnit,
             lblLastAutoPushCaption, lblLastAutoPush,
             sep,
-            btnSyncNow, btnPushAllChanges, btnPullPast, btnResetDayData, btnPeekWebApi,
+            btnSyncNow, btnPushAllChanges, btnPullPast, btnResetDayData, btnPeekWebApi, btnHelp,
             btnAdvancedToggle, panelAdvancedContent,
             btnCancelSync, lblStatus,
             lblLogCaption, txtLog
