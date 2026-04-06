@@ -32,7 +32,7 @@ class PendingSyncWorker @AssistedInject constructor(
             log.log("Push: ${pending.size} pending update(s)")
             for (entity in pending) {
                 val body = JSONObject(entity.payload)
-                val success = apiClient.patchRunner(
+                val error = apiClient.patchRunner(
                     date = entity.competitionDate,
                     startNumber = entity.startNumber,
                     statusId = body.optInt("statusId").takeIf { body.has("statusId") },
@@ -46,12 +46,12 @@ class PendingSyncWorker @AssistedInject constructor(
                     source = settings.deviceName,
                     settings = settings
                 )
-                if (success) {
+                if (error == null) {
                     pendingSyncDao.markSent(entity.id)
                     log.log("Push #${entity.startNumber} OK")
                 } else {
                     pendingSyncDao.markFailed(entity.id)
-                    log.log("Push #${entity.startNumber} FAILED (attempt ${runAttemptCount + 1})")
+                    log.log("Push #${entity.startNumber} FAILED: $error (attempt ${runAttemptCount + 1})")
                     allSucceeded = false
                 }
             }

@@ -49,7 +49,8 @@ class ApiClient(
     private fun toIso(epochMs: Long): String =
         isoFormatter.format(Instant.ofEpochMilli(epochMs).atOffset(ZoneOffset.UTC))
 
-    /** PATCH /api/competitions/{date}/runners/{startNumber} */
+    /** PATCH /api/competitions/{date}/runners/{startNumber}.
+     *  Returns null on success, or an error string (e.g. "HTTP 409", "Timeout") on failure. */
     suspend fun patchRunner(
         date: String,
         startNumber: Int,
@@ -63,10 +64,10 @@ class ApiClient(
         lastModifiedAtMs: Long,
         source: String,
         settings: AppSettings
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): String? = withContext(Dispatchers.IO) {
         val baseUrl = settings.apiBaseUrl.trimEnd('/')
         val apiKey = settings.apiKey
-        if (baseUrl.isBlank() || apiKey.isBlank()) return@withContext false
+        if (baseUrl.isBlank() || apiKey.isBlank()) return@withContext "no API config"
 
         try {
             val body = JSONObject().apply {
@@ -87,9 +88,12 @@ class ApiClient(
                 .method("PATCH", body.toRequestBody("application/json".toMediaType()))
                 .build()
 
-            okHttpClient.newCall(request).execute().use { it.isSuccessful }
-        } catch (_: Exception) {
-            false
+            okHttpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) null
+                else "HTTP ${response.code}"
+            }
+        } catch (e: Exception) {
+            e.message ?: e.javaClass.simpleName
         }
     }
 
