@@ -14,6 +14,7 @@ import com.orienteering.startref.data.local.entity.PendingSyncEntity
 import com.orienteering.startref.data.local.entity.RunnerEntity
 import com.orienteering.startref.data.remote.ApiClient
 import com.orienteering.startref.data.settings.SettingsDataStore
+import com.orienteering.startref.data.si.SiDebugLog
 import com.orienteering.startref.data.sync.SyncManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.StateFlow
@@ -38,6 +39,7 @@ class StartListRepository @Inject constructor(
     private val apiClient: ApiClient,
     private val settingsDataStore: SettingsDataStore,
     private val undoRedoStack: UndoRedoStack,
+    private val log: SiDebugLog,
     @ApplicationContext private val context: Context
 ) {
     val canUndo: StateFlow<Boolean> = undoRedoStack.canUndo
@@ -239,8 +241,13 @@ class StartListRepository @Inject constructor(
             source = settings.deviceName,
             settings = settings
         )
-        if (success) pendingSyncDao.markSent(id)
-        else pendingSyncDao.markFailed(id)
+        if (success) {
+            pendingSyncDao.markSent(id)
+            log.log("Push #$startNumber OK")
+        } else {
+            pendingSyncDao.markFailed(id)
+            log.log("Push #$startNumber FAILED")
+        }
     }
 
     private fun buildPatchPayload(block: JSONObject.() -> Unit): String =

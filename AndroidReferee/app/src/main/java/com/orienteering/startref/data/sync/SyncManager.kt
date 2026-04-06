@@ -1,5 +1,7 @@
 package com.orienteering.startref.data.sync
 
+import androidx.room.withTransaction
+import com.orienteering.startref.data.local.AppDatabase
 import com.orienteering.startref.data.local.LookupDao
 import com.orienteering.startref.data.local.RunnerDao
 import com.orienteering.startref.data.local.entity.ClassLookupEntity
@@ -25,6 +27,7 @@ import javax.inject.Singleton
 
 @Singleton
 class SyncManager @Inject constructor(
+    private val db: AppDatabase,
     private val runnerDao: RunnerDao,
     private val lookupDao: LookupDao,
     private val apiClient: ApiClient,
@@ -104,9 +107,11 @@ class SyncManager @Inject constructor(
             val result = apiClient.getRunners(settings.competitionDate, null, settings)
                 ?: throw IllegalStateException("No response from API – check API URL and competition date in Settings")
 
-            runnerDao.deleteAll()
             val entities = result.runners.map { it.toEntity(settings.competitionDate) }
-            if (entities.isNotEmpty()) runnerDao.insertAll(entities)
+            db.withTransaction {
+                runnerDao.deleteAll()
+                if (entities.isNotEmpty()) runnerDao.insertAll(entities)
+            }
 
             val classNamesChanged = syncClassLookups(settings)
             val clubNamesChanged = syncClubLookups(settings)
