@@ -39,7 +39,10 @@ data class GateUiState(
     val readerConnected: Boolean = false
 ) {
     /** True when the current-minute runner rows should be tappable for chip assignment. */
-    val rowsClickable get() = signal == GateSignal.RED || signal == GateSignal.ORANGE
+    val rowsClickable get() = signal == GateSignal.RED
+
+    /** True when the orange/red decision buttons should be shown. */
+    val showActionButtons get() = signal == GateSignal.ORANGE || signal == GateSignal.RED
 }
 
 @HiltViewModel
@@ -140,6 +143,9 @@ class GateViewModel @Inject constructor(
         }
     }
 
+    /** Referee rejects the runner — clear the screen, write nothing to the DB. */
+    fun dontLetIn() { resetSignal() }
+
     /** Keep chip remembered and rows clickable so referee can tap to assign. */
     fun dismiss() {
         val siCard = _uiState.value.lastReadSiCard ?: return
@@ -182,7 +188,7 @@ class GateViewModel @Inject constructor(
                 signal = GateSignal.RED,
                 lastReadSiCard = siCard,
                 pendingApproveRunner = null,
-                statusLine = "Not found: SI $siCard"
+                statusLine = "Not found: SI $siCard — tap a runner to assign"
             ) }
             return
         }

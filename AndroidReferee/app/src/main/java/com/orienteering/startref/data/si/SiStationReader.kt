@@ -55,7 +55,16 @@ class SiStationReader @Inject constructor(
 
     private var ioManager: SerialInputOutputManager? = null
     private var port: UsbSerialPort? = null
+    // Dedicated thread for the continuous serial read loop (SerialInputOutputManager.run()).
+    private var ioExecutor = Executors.newSingleThreadExecutor()
+    // Short-lived tasks (ACK writes) — kept on a separate thread so the read loop never blocks them.
     private var executor = Executors.newSingleThreadExecutor()
+
+    // Single reusable ToneGenerator — recreated only when the audio stream changes.
+    // Avoids the per-read native-resource leak that eventually silenced the beep.
+    private val toneLock = Any()
+    private var toneGenerator: ToneGenerator? = null
+    private var toneGeneratorStream: Int = -1
 
     // Accumulation buffer for parsing multi-byte SI protocol frames (capped to prevent unbounded growth)
     private val buffer = mutableListOf<Byte>()
@@ -93,10 +102,16 @@ class SiStationReader @Inject constructor(
     }
 
     private fun playTone(stream: Int, tone: Int, durationMs: Int) {
-        val tg = ToneGenerator(stream, ToneGenerator.MAX_VOLUME)
-        tg.startTone(tone, durationMs)
-        // Release after tone finishes to avoid native resource leak
-        executor.submit { Thread.sleep(durationMs.toLong() + 50); tg.release() }
+        synchronized(toneLock) {
+            var tg = toneGenerator
+            if (tg == null || toneGeneratorStream != stream) {
+                tg?.release()
+                tg = ToneGenerator(stream, ToneGenerator.MAX_VOLUME)
+                toneGenerator = tg
+                toneGeneratorStream = stream
+            }
+            tg.startTone(tone, durationMs)
+        }
     }
 
     /**
@@ -122,6 +137,7 @@ class SiStationReader @Inject constructor(
     fun start() {
         if (ioManager != null) return  // Already connected — idempotent
 
+        if (ioExecutor.isShutdown) ioExecutor = Executors.newSingleThreadExecutor()
         if (executor.isShutdown) executor = Executors.newSingleThreadExecutor()
 
         val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
@@ -173,7 +189,7 @@ class SiStationReader @Inject constructor(
             }).also {
                 it.readTimeout = 2000  // Non-zero timeout avoids infinite blocking reads
             }
-            executor.submit(ioManager)
+            ioExecutor.submit(ioManager)
             _connectionState.value = SiConnectionState.CONNECTED
             debugLog.log("Connected: ${driver.device.deviceName} VID=${driver.device.vendorId} PID=${driver.device.productId}")
         }.onFailure {
@@ -197,7 +213,13 @@ class SiStationReader @Inject constructor(
         ioManager = null
         port = null
         buffer.clear()
+        ioExecutor.shutdownNow()
         executor.shutdownNow()
+        synchronized(toneLock) {
+            toneGenerator?.release()
+            toneGenerator = null
+            toneGeneratorStream = -1
+        }
         _connectionState.value = SiConnectionState.DISCONNECTED
     }
 

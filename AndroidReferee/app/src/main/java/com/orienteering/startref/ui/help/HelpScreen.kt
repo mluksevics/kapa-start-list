@@ -85,6 +85,17 @@ fun HelpScreen() {
                 HelpItem("Undo / Redo", "Reverses the last assignment or status change from this screen.")
             }
 
+            HelpSection("Competitors tab") {
+                HelpPara("Find any competitor without scrolling the start list. This tab searches every loaded runner regardless of the Start Place filter.")
+                HelpItem("Mode chips", "Pick what to search by: Name, Start No, Chip, Class, Club or All Vacants. Switching mode clears the current search.")
+                HelpItem("Name / Start No / Chip", "Free-text search. Results filter as you type and match only the selected field — name and surname, start number, or SI chip number.")
+                HelpItem("Class", "Shows all classes that have runners — men in the left columns, women in the right, DIR/OPEN classes on top. Tap one to see its competitors sorted by start time.")
+                HelpItem("Club", "Shows all clubs that have runners in a 3-column grid. Tap one to see its competitors sorted by surname. Use the back arrow to return to the list.")
+                HelpItem("All Vacants", "Lists every empty 'Vacant' start slot, sorted by start time — handy for assigning late entries.")
+                HelpItem("Tapping a runner", "Opens the runner detail editor. Saved changes sync to the API.")
+                HelpItem("Mark vacant", "Button in the editor that clears the runner's name and sets surname and club to 'Vacant', turning the entry into an empty slot. Vacant entries cannot be given a name or club.")
+            }
+
             HelpSection("Settings") {
                 HelpItem("Force Pull all", "Downloads the complete start list from the API and replaces local data. Use this after the Desktop has done a full OE12 import, or if local data looks corrupted.")
                 HelpItem("Push pending updates", "Immediately retries all unsent PATCH requests. Normally these retry automatically; use this button when you want to flush them right now.")

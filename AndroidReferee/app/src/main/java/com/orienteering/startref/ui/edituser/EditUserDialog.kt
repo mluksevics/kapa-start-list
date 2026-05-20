@@ -1,5 +1,6 @@
 package com.orienteering.startref.ui.edituser
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,8 +10,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -18,13 +23,16 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimeInput
 import androidx.compose.material3.TimePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -32,13 +40,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.orienteering.startref.data.local.ClassEntry
 import com.orienteering.startref.data.local.ClubEntry
 import com.orienteering.startref.data.local.entity.RunnerEntity
+import com.orienteering.startref.ui.common.ClubGridPickerDialog
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -50,6 +62,7 @@ fun EditUserDialog(
     availableClasses: List<ClassEntry>,
     availableClubs: List<ClubEntry>,
     currentTimeMs: Long,
+    showQuickStartTimeButtons: Boolean = true,
     onDismiss: () -> Unit,
     onSave: (RunnerEntity) -> Unit
 ) {
@@ -68,9 +81,20 @@ fun EditUserDialog(
         ClassChangePolicy.allowedClassTargets(runner.className, availableClasses)
     }
     var selectedClubEntry by remember { mutableStateOf(ClubEntry(runner.clubId, runner.clubName)) }
-    var clubDropdownExpanded by remember { mutableStateOf(false) }
+    var showClubPicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var saveAttempted by remember { mutableStateOf(false) }
+
+    val nameFocus = remember { FocusRequester() }
+    val surnameFocus = remember { FocusRequester() }
+    val siCardFocus = remember { FocusRequester() }
+
+    // A "vacant" entry is an empty start slot — it must never be given a name or club.
+    val isVacant = surname.trim().equals("vacant", ignoreCase = true)
+    val vacantClub = remember(availableClubs) {
+        availableClubs.firstOrNull { it.clubName.trim().equals("Vacant", ignoreCase = true) }
+            ?: ClubEntry(0, "Vacant")
+    }
 
     val timePickerState = rememberTimePickerState(
         initialHour = initialDateTime.hour,
@@ -123,19 +147,51 @@ fun EditUserDialog(
 
     if (showTimePicker) {
         Dialog(onDismissRequest = { showTimePicker = false }) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                TimePicker(state = timePickerState)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
-                    TextButton(onClick = { showTimePicker = false }) { Text("OK") }
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    TimeInput(state = timePickerState)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
+                        TextButton(onClick = { showTimePicker = false }) { Text("OK") }
+                    }
                 }
             }
         }
     }
 
+    if (showClubPicker) {
+        ClubGridPickerDialog(
+            clubs = availableClubs,
+            onSelect = {
+                selectedClubEntry = it
+                showClubPicker = false
+            },
+            onDismiss = { showClubPicker = false }
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Runner") },
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Edit Runner", modifier = Modifier.weight(1f))
+                if (!isVacant) {
+                    TextButton(
+                        onClick = {
+                            name = ""
+                            surname = "Vacant"
+                            selectedClubEntry = vacantClub
+                        }
+                    ) { Text("Mark vacant") }
+                }
+            }
+        },
         text = {
             Column(
                 modifier = Modifier
@@ -152,26 +208,57 @@ fun EditUserDialog(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Name") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(nameFocus),
+                    singleLine = true,
+                    enabled = !isVacant,
+                    trailingIcon = {
+                        if (!isVacant && name.isNotEmpty()) {
+                            IconButton(onClick = { name = ""; nameFocus.requestFocus() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear name")
+                            }
+                        }
+                    },
+                    supportingText = if (isVacant) {
+                        { Text("Vacant slot — name cannot be set") }
+                    } else null
                 )
 
                 OutlinedTextField(
                     value = surname,
                     onValueChange = { surname = it },
                     label = { Text("Surname") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(surnameFocus),
+                    singleLine = true,
+                    trailingIcon = {
+                        if (surname.isNotEmpty()) {
+                            IconButton(onClick = { surname = ""; surnameFocus.requestFocus() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear surname")
+                            }
+                        }
+                    }
                 )
 
                 OutlinedTextField(
                     value = siCard,
                     onValueChange = { if (it.all { c -> c.isDigit() }) siCard = it },
                     label = { Text("SI Card") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(siCardFocus),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     isError = saveAttempted && !siCardValid,
+                    trailingIcon = {
+                        if (siCard.isNotEmpty()) {
+                            IconButton(onClick = { siCard = ""; siCardFocus.requestFocus() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear SI card")
+                            }
+                        }
+                    },
                     supportingText = if (saveAttempted && !siCardValid) {
                         { Text("SI chip is required") }
                     } else null
@@ -227,34 +314,41 @@ fun EditUserDialog(
                     )
                 }
 
-                ExposedDropdownMenuBox(
-                    expanded = clubDropdownExpanded,
-                    onExpandedChange = { clubDropdownExpanded = it }
-                ) {
+                if (isVacant) {
                     OutlinedTextField(
                         value = selectedClubEntry.clubName,
                         onValueChange = {},
                         readOnly = true,
+                        enabled = false,
                         label = { Text("Club") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clubDropdownExpanded) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        supportingText = { Text("Vacant slot — club cannot be set") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
-                    ExposedDropdownMenu(
-                        expanded = clubDropdownExpanded,
-                        onDismissRequest = { clubDropdownExpanded = false }
-                    ) {
-                        availableClubs.forEach { entry ->
-                            DropdownMenuItem(
-                                text = { Text(entry.clubName) },
-                                onClick = {
-                                    selectedClubEntry = entry
-                                    clubDropdownExpanded = false
-                                }
-                            )
-                        }
-                    }
+                } else {
+                    OutlinedTextField(
+                        value = selectedClubEntry.clubName,
+                        onValueChange = {},
+                        readOnly = true,
+                        enabled = false,
+                        label = { Text("Club") },
+                        trailingIcon = {
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showClubPicker = true },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                            disabledBorderColor = MaterialTheme.colorScheme.outline,
+                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -271,29 +365,31 @@ fun EditUserDialog(
                     )
                 }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    listOf(1, 2, 3, 4).forEach { minutes ->
-                        Button(
-                            onClick = {
-                                val newMs = nowPlusMinutes(minutes)
-                                val newDt = LocalDateTime.ofInstant(
-                                    Instant.ofEpochMilli(newMs),
-                                    ZoneId.systemDefault()
-                                )
-                                timePickerState.hour = newDt.hour
-                                timePickerState.minute = newDt.minute
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            ),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(4.dp)
-                        ) {
-                            Text("+${minutes}m", style = MaterialTheme.typography.labelSmall)
+                if (showQuickStartTimeButtons) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        listOf(1, 2, 3, 4).forEach { minutes ->
+                            Button(
+                                onClick = {
+                                    val newMs = nowPlusMinutes(minutes)
+                                    val newDt = LocalDateTime.ofInstant(
+                                        Instant.ofEpochMilli(newMs),
+                                        ZoneId.systemDefault()
+                                    )
+                                    timePickerState.hour = newDt.hour
+                                    timePickerState.minute = newDt.minute
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                ),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(4.dp)
+                            ) {
+                                Text("+${minutes}m", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
                 }

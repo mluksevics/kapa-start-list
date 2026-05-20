@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -52,13 +54,10 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
     val syncCounts by viewModel.syncCounts.collectAsStateWithLifecycle()
 
     Scaffold { paddingValues ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-        ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
         ) {
             // SI Reader connection status strip
             SiStatusStrip(connected = state.readerConnected)
@@ -101,30 +100,79 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
 
             HorizontalDivider()
 
-            // Action buttons — visible on ORANGE or RED (includes manual-hold RED)
-            if (state.rowsClickable) {
+            // Action buttons — visible on ORANGE or RED
+            if (state.showActionButtons) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (state.signal == GateSignal.ORANGE) {
-                        Button(
-                            onClick = { viewModel.approve() },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
-                        ) {
-                            Text("Approve")
+                    when (state.signal) {
+                        GateSignal.ORANGE -> {
+                            OutlinedButton(
+                                onClick = { viewModel.dontLetIn() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Don't let in")
+                            }
+                            Button(
+                                onClick = { viewModel.approve() },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                            ) {
+                                Text("Mark as started")
+                            }
+                            OutlinedButton(
+                                onClick = { viewModel.dismiss() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Assign to runner")
+                            }
                         }
-                    }
-                    OutlinedButton(
-                        onClick = { viewModel.dismiss() },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Dismiss")
+                        GateSignal.RED -> {
+                            OutlinedButton(
+                                onClick = { viewModel.dontLetIn() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Don't let in")
+                            }
+                        }
+                        else -> {}
                     }
                 }
+            }
+
+            // Undo/Redo controls + sync-count indicator
+            val (sent, total) = syncCounts
+            Row(
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .height(48.dp)
+                        .widthIn(min = 48.dp)
+                        .background(Color.White, shape = RoundedCornerShape(6.dp))
+                        .clickable { viewModel.forcePush() }
+                        .padding(horizontal = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "$sent/$total",
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        color = if (sent < total) Color(0xFFE65100) else Color(0xFF2E7D32)
+                    )
+                }
+                UndoRedoButtons(
+                    canUndo = canUndo,
+                    canRedo = canRedo,
+                    onUndo = { viewModel.undo() },
+                    onRedo = { viewModel.redo() }
+                )
             }
 
             // Status line
@@ -137,35 +185,6 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
                     .padding(12.dp)
             )
         } // end Column
-
-        val (sent, total) = syncCounts
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(Color.White, shape = CircleShape)
-                    .clickable { viewModel.forcePush() },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "$sent/$total",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (sent < total) Color(0xFFE65100) else Color(0xFF2E7D32)
-                )
-            }
-            UndoRedoButtons(
-                canUndo = canUndo,
-                canRedo = canRedo,
-                onUndo = { viewModel.undo() },
-                onRedo = { viewModel.redo() }
-            )
-        }
-        } // end Box
     }
 }
 
