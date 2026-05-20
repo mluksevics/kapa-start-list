@@ -1,8 +1,6 @@
 package com.orienteering.startref.ui.startlist
 
 import android.content.Context
-import android.media.AudioManager
-import android.media.ToneGenerator
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -82,38 +80,38 @@ class StartListViewModel @Inject constructor(
 
     val readerConnected: StateFlow<Boolean> = siReader.connectionState
         .map { it == SiConnectionState.CONNECTED }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val settings: StateFlow<AppSettings> = settingsDataStore.settings
-        .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings.DEFAULT)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings.DEFAULT)
 
     val availableClasses: StateFlow<List<ClassEntry>> = combine(
         repository.observeLookupClasses(),
         repository.observeClasses()
     ) { lookupClasses, runnerClasses ->
         if (lookupClasses.isNotEmpty()) lookupClasses else runnerClasses
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val availableClubs: StateFlow<List<ClubEntry>> = repository.observeLookupClubs()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val syncCounts: StateFlow<Pair<Int, Int>> = repository.observeSyncCounts()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0 to 0)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0 to 0)
 
     val isSyncing: StateFlow<Boolean> = syncManager.isSyncing
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val canUndo: StateFlow<Boolean> = repository.canUndo
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val canRedo: StateFlow<Boolean> = repository.canRedo
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     fun undo() { viewModelScope.launch { repository.undo() } }
     fun redo() { viewModelScope.launch { repository.redo() } }
 
-    private val currentTimeMinute = _currentTimeMs
+    val currentTimeMinute: StateFlow<Long> = _currentTimeMs
         .map { it / 60_000L }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, System.currentTimeMillis() / 60_000L)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), System.currentTimeMillis() / 60_000L)
 
     val startListItems: StateFlow<List<StartListItem>> = combine(
         repository.observeRunners(),
@@ -128,7 +126,7 @@ class StartListViewModel @Inject constructor(
         val filtered = if (s.startPlace == 0) runners
         else runners.filter { classStartPlaces[it.classId] == s.startPlace }
         buildItems(filtered, tod, highlights)
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private var lastAlertMinute = -1L
 
@@ -293,13 +291,7 @@ class StartListViewModel @Inject constructor(
     private fun triggerMinuteAlert() {
         val s = settings.value
         if (s.soundEnabled) {
-            try {
-                val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                am.setStreamVolume(AudioManager.STREAM_ALARM, am.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0)
-                val tg = ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME)
-                tg.startTone(ToneGenerator.TONE_CDMA_ABBR_ALERT, 800)
-                viewModelScope.launch { delay(850); tg.release() }
-            } catch (_: Exception) {}
+            siReader.playMinuteAlert()
         }
         if (s.vibrationEnabled) {
             try {

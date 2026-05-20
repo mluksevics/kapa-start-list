@@ -32,10 +32,10 @@ fun RunnerRow(
     runner: RunnerEntity,
     highlightFields: Set<String> = emptySet(),
     highlighted: Boolean = false,
-    onCheckIn: () -> Unit,
-    onDns: () -> Unit,
-    onEdit: () -> Unit,
-    onChipClick: () -> Unit = {},
+    onCheckIn: (Int) -> Unit,
+    onDns: (Int) -> Unit,
+    onEdit: (RunnerEntity) -> Unit,
+    onChipClick: (RunnerEntity) -> Unit = {},
     fontSize: TextUnit = 16.sp
 ) {
     val isDns = runner.statusId == 3
@@ -63,8 +63,8 @@ fun RunnerRow(
             modifier = Modifier
                 .size(52.dp)
                 .combinedClickable(
-                    onClick = onCheckIn,
-                    onLongClick = onDns
+                    onClick = { onCheckIn(runner.startNumber) },
+                    onLongClick = { onDns(runner.startNumber) }
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -99,7 +99,7 @@ fun RunnerRow(
             color = if (hl("SiChipNo")) hlColor else Color.Unspecified,
             modifier = Modifier
                 .width(96.dp)
-                .clickable(onClick = onChipClick),
+                .clickable(onClick = { onChipClick(runner) }),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -125,7 +125,7 @@ fun RunnerRow(
             overflow = TextOverflow.Ellipsis
         )
 
-        TextButton(onClick = onEdit) {
+        TextButton(onClick = { onEdit(runner) }) {
             Text("Edit", fontSize = fontSize)
         }
     }

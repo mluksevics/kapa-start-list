@@ -18,13 +18,24 @@ class SiDebugLog @Inject constructor() {
 
     private val formatter = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
 
+    // Bounded ring buffer — one snapshot allocation per log call instead of two.
+    private val ring = ArrayDeque<SiLogEntry>(MAX_ENTRIES)
+
+    @Synchronized
     fun log(message: String) {
-        val entry = SiLogEntry(LocalTime.now().format(formatter), message)
-        _entries.value = (_entries.value + entry).takeLast(200)
+        ring.addLast(SiLogEntry(LocalTime.now().format(formatter), message))
+        while (ring.size > MAX_ENTRIES) ring.removeFirst()
+        _entries.value = ring.toList()
         Log.d("SiReader", message)
     }
 
+    @Synchronized
     fun clear() {
+        ring.clear()
         _entries.value = emptyList()
+    }
+
+    private companion object {
+        const val MAX_ENTRIES = 200
     }
 }

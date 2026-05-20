@@ -10,7 +10,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -29,10 +28,9 @@ class StartRefApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        runBlocking(Dispatchers.IO) {
-            settingsDataStore.ensureDefaultDeviceNameIfMissing()
-        }
+        // Off the main thread — a DataStore read here would delay the first frame.
         appScope.launch {
+            settingsDataStore.ensureDefaultDeviceNameIfMissing()
             syncManager.startPolling()
         }
     }

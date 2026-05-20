@@ -11,7 +11,7 @@ import com.orienteering.startref.data.local.entity.RunnerEntity
 
 @Database(
     entities = [RunnerEntity::class, PendingSyncEntity::class, ClassLookupEntity::class, ClubLookupEntity::class],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -164,6 +164,15 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE runners_new RENAME TO runners")
                 db.execSQL(
                     "ALTER TABLE class_lookups ADD COLUMN startPlace INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
+        // Adds an index on runners.siCard to speed up SI-card lookups.
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_runners_siCard` ON `runners` (`siCard`)"
                 )
             }
         }

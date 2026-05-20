@@ -24,6 +24,9 @@ import java.time.LocalTime
 import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.random.Random
+
+private const val MAX_BACKOFF_MS = 30_000L
 
 @Singleton
 class SyncManager @Inject constructor(
@@ -48,16 +51,28 @@ class SyncManager @Inject constructor(
 
     /** Runs indefinitely — launch in a long-lived coroutine scope (e.g. Application scope). */
     suspend fun startPolling() {
+        var consecutiveFailures = 0
         while (true) {
-            runCatching { poll() }
-            val intervalMs = settingsDataStore.settings.first().pollIntervalSeconds
+            val ok = poll()
+            consecutiveFailures = if (ok) 0 else consecutiveFailures + 1
+
+            val baseMs = settingsDataStore.settings.first().pollIntervalSeconds
                 .coerceAtLeast(5)
                 .times(1000L)
-            delay(intervalMs)
+            // Exponential backoff while the server is unreachable, capped at MAX_BACKOFF_MS.
+            val backoffMs = if (consecutiveFailures == 0) {
+                baseMs
+            } else {
+                val shift = (consecutiveFailures - 1).coerceAtMost(5)
+                (baseMs shl shift).coerceAtMost(MAX_BACKOFF_MS)
+            }
+            // ±10% jitter so multiple devices do not re-sync in lockstep.
+            val jitter = (backoffMs * 0.1 * (Random.nextDouble() * 2 - 1)).toLong()
+            delay((backoffMs + jitter).coerceAtLeast(1_000L))
         }
     }
 
-    suspend fun poll() {
+    suspend fun poll(): Boolean {
         _isSyncing.value = true
         try {
             val settings = settingsDataStore.settings.first()
@@ -75,7 +90,7 @@ class SyncManager @Inject constructor(
             val t0 = System.currentTimeMillis()
             val result = apiClient.getRunners(settings.competitionDate, changedSince, settings) ?: run {
                 log.log("Poll: no response from server (${System.currentTimeMillis() - t0}ms)")
-                return
+                return false
             }
             log.log("GET runners: ${System.currentTimeMillis() - t0}ms")
 
@@ -107,8 +122,10 @@ class SyncManager @Inject constructor(
                     )
                 )
             }
+            return true
         } catch (e: Exception) {
             log.log("Poll error: ${e.message}")
+            return false
         } finally {
             _isSyncing.value = false
         }

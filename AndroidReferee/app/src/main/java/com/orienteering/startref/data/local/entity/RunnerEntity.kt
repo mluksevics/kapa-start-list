@@ -1,9 +1,13 @@
 package com.orienteering.startref.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "runners")
+@Entity(
+    tableName = "runners",
+    indices = [Index(value = ["siCard"])]
+)
 data class RunnerEntity(
     @PrimaryKey val startNumber: Int,
     val name: String,

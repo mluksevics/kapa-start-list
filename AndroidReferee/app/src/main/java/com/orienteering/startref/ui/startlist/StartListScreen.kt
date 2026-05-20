@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.orienteering.startref.data.settings.AppSettings
 import com.orienteering.startref.ui.common.UndoRedoButtons
 import com.orienteering.startref.ui.edituser.ChipQuickEditDialog
 import com.orienteering.startref.ui.edituser.EditUserDialog
@@ -64,7 +65,7 @@ fun StartListScreen(
     viewModel: StartListViewModel = hiltViewModel()
 ) {
     val items by viewModel.startListItems.collectAsStateWithLifecycle()
-    val currentTimeMs by viewModel.currentTimeMs.collectAsStateWithLifecycle()
+    val currentMinute by viewModel.currentTimeMinute.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val selectedRunner by viewModel.selectedRunner.collectAsStateWithLifecycle()
     val chipQuickEditRunner by viewModel.chipQuickEditRunner.collectAsStateWithLifecycle()
@@ -100,7 +101,6 @@ fun StartListScreen(
     }
 
     // Auto-scroll: fire every time the minute changes
-    val currentMinute = currentTimeMs / 60_000
     LaunchedEffect(currentMinute) {
         if (autoScrollEnabled && items.isNotEmpty()) {
             val idx = viewModel.currentHeaderIndex()
@@ -131,29 +131,7 @@ fun StartListScreen(
                             )
                         }
                     },
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val adjustedTimeMs = currentTimeMs -
-                                (settings.prestartMinutes * 60_000L)
-                            Text(
-                                clockFormatter.format(Instant.ofEpochMilli(adjustedTimeMs)),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            val offset = settings.serverClockOffsetMs
-                            if (offset != 0L) {
-                                val sign = if (offset > 0) "+" else ""
-                                Text(
-                                    text = "${sign}${offset}ms",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (kotlin.math.abs(offset) > 500) Color.Red
-                                            else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
-                                    modifier = Modifier.padding(start = 4.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(settings.headerText, style = MaterialTheme.typography.titleMedium)
-                        }
-                    },
+                    title = { ClockTitle(viewModel = viewModel, settings = settings) },
                     actions = {
                         // Auto-scroll toggle
                         IconButton(onClick = { viewModel.toggleAutoScroll() }) {
@@ -223,6 +201,12 @@ fun StartListScreen(
                                 is StartListItem.Header -> "h_${item.timeMinute}"
                                 is StartListItem.Row -> "r_${item.runner.startNumber}"
                             }
+                        },
+                        contentType = { item ->
+                            when (item) {
+                                is StartListItem.Header -> "header"
+                                is StartListItem.Row -> "row"
+                            }
                         }
                     ) { item ->
                         Box {
@@ -232,10 +216,10 @@ fun StartListScreen(
                                     runner = item.runner,
                                     highlightFields = item.highlightFields,
                                     highlighted = item.runner.startNumber == highlightedStartNumber,
-                                    onCheckIn = { viewModel.toggleStarted(item.runner.startNumber) },
-                                    onDns = { viewModel.toggleDns(item.runner.startNumber) },
-                                    onEdit = { viewModel.selectRunner(item.runner) },
-                                    onChipClick = { viewModel.openChipQuickEdit(item.runner) },
+                                    onCheckIn = viewModel::toggleStarted,
+                                    onDns = viewModel::toggleDns,
+                                    onEdit = viewModel::selectRunner,
+                                    onChipClick = viewModel::openChipQuickEdit,
                                     fontSize = settings.rowFontSize.sp
                                 )
                             }
@@ -261,11 +245,12 @@ fun StartListScreen(
     }
 
     selectedRunner?.let { runner ->
+        val nowMs by viewModel.currentTimeMs.collectAsStateWithLifecycle()
         EditUserDialog(
             runner = runner,
             availableClasses = availableClasses,
             availableClubs = availableClubs,
-            currentTimeMs = currentTimeMs - (settings.prestartMinutes * 60_000L),
+            currentTimeMs = nowMs - (settings.prestartMinutes * 60_000L),
             onDismiss = { viewModel.selectRunner(null) },
             onSave = { updated -> viewModel.updateRunner(updated) }
         )
@@ -277,6 +262,33 @@ fun StartListScreen(
             onDismiss = { viewModel.clearChipQuickEdit() },
             onSave = { digits -> viewModel.saveQuickChip(digits) }
         )
+    }
+}
+
+/** Top-bar clock — collects [StartListViewModel.currentTimeMs] itself so the per-second
+ *  tick recomposes only this title, not the whole screen. */
+@Composable
+private fun ClockTitle(viewModel: StartListViewModel, settings: AppSettings) {
+    val currentTimeMs by viewModel.currentTimeMs.collectAsStateWithLifecycle()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        val adjustedTimeMs = currentTimeMs - (settings.prestartMinutes * 60_000L)
+        Text(
+            clockFormatter.format(Instant.ofEpochMilli(adjustedTimeMs)),
+            style = MaterialTheme.typography.titleMedium
+        )
+        val offset = settings.serverClockOffsetMs
+        if (offset != 0L) {
+            val sign = if (offset > 0) "+" else ""
+            Text(
+                text = "${sign}${offset}ms",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (kotlin.math.abs(offset) > 500) Color.Red
+                        else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
+                modifier = Modifier.padding(start = 4.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(settings.headerText, style = MaterialTheme.typography.titleMedium)
     }
 }
 

@@ -115,7 +115,10 @@ fun EditUserDialog(
         } else {
             true
         }
-    val clubValid = selectedClubEntry.clubId != 0 && selectedClubEntry.clubName.isNotBlank()
+    // A real competitor must have a real club; a vacant slot keeps the "Vacant" club.
+    val clubValid = isVacant ||
+        (selectedClubEntry.clubName.isNotBlank() &&
+            !selectedClubEntry.clubName.trim().equals("Vacant", ignoreCase = true))
     // year-2000 threshold — guards against epoch-0 placeholder start times
     val startTimeValid = runner.startTime > 946_684_800_000L
 
@@ -186,6 +189,7 @@ fun EditUserDialog(
                         onClick = {
                             name = ""
                             surname = "Vacant"
+                            siCard = "0"
                             selectedClubEntry = vacantClub
                         }
                     ) { Text("Mark vacant") }
@@ -330,6 +334,7 @@ fun EditUserDialog(
                         )
                     )
                 } else {
+                    val clubError = saveAttempted && !clubValid
                     OutlinedTextField(
                         value = selectedClubEntry.clubName,
                         onValueChange = {},
@@ -342,11 +347,17 @@ fun EditUserDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { showClubPicker = true },
+                        supportingText = if (clubError) {
+                            { Text("Club is required") }
+                        } else null,
                         colors = OutlinedTextFieldDefaults.colors(
                             disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                            disabledBorderColor = MaterialTheme.colorScheme.outline,
-                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            disabledBorderColor = if (clubError) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.outline,
+                            disabledLabelColor = if (clubError) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledSupportingTextColor = MaterialTheme.colorScheme.error
                         )
                     )
                 }
@@ -396,7 +407,15 @@ fun EditUserDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(buildUpdatedRunner()) }) { Text("Save") }
+            Button(
+                onClick = {
+                    if (clubValid) {
+                        onSave(buildUpdatedRunner())
+                    } else {
+                        saveAttempted = true
+                    }
+                }
+            ) { Text("Save") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

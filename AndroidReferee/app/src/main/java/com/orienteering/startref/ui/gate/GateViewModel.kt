@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -28,8 +29,6 @@ import javax.inject.Inject
 enum class GateSignal { IDLE, BRIGHT_GREEN, GREEN, ORANGE, RED }
 
 data class GateUiState(
-    val currentTimeMs: Long = System.currentTimeMillis(),
-    val adjustedCurrentTimeMs: Long = System.currentTimeMillis(),
     val currentMinuteRunners: List<RunnerEntity> = emptyList(),
     val signal: GateSignal = GateSignal.IDLE,
     val lastReadSiCard: String? = null,
@@ -58,7 +57,17 @@ class GateViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(GateUiState())
     val uiState: StateFlow<GateUiState> = _uiState.asStateFlow()
     val settings: StateFlow<AppSettings> = settingsDataStore.settings
-        .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings.DEFAULT)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppSettings.DEFAULT)
+
+    private val _nowMs = MutableStateFlow(System.currentTimeMillis())
+    /** Wall-clock time, ticked once per second — kept out of [uiState] so the runner
+     *  list does not recompose on every tick. */
+    val currentTimeMs: StateFlow<Long> = _nowMs.asStateFlow()
+
+    /** [currentTimeMs] shifted by the prestart offset — drives the gate clock display. */
+    val adjustedCurrentTimeMs: StateFlow<Long> = combine(_nowMs, settings) { now, s ->
+        now - s.prestartMinutes * 60_000L
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), System.currentTimeMillis())
 
     /** Cached runner list from Room Flow — avoids querying DB every second. */
     private var cachedRunners: List<RunnerEntity> = emptyList()
@@ -66,11 +75,11 @@ class GateViewModel @Inject constructor(
     private var cachedClassStartPlaces: Map<Int, Int> = emptyMap()
 
     val canUndo: StateFlow<Boolean> = repository.canUndo
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val canRedo: StateFlow<Boolean> = repository.canRedo
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
     val syncCounts: StateFlow<Pair<Int, Int>> = repository.observeSyncCounts()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0 to 0)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0 to 0)
 
     fun undo() { viewModelScope.launch { repository.undo() } }
     fun redo() { viewModelScope.launch { repository.redo() } }
@@ -91,17 +100,21 @@ class GateViewModel @Inject constructor(
         viewModelScope.launch {
             lookupDao.observeAllClasses().collect { classes ->
                 cachedClassStartPlaces = classes.associate { it.id to it.startPlace }
+                updateCurrentMinuteRunners(System.currentTimeMillis())
             }
         }
 
-        // Clock tick — uses cached runners, no DB query
+        // Clock tick — runner list is only recomputed when the minute boundary changes
         viewModelScope.launch {
+            var lastTod = -1
             while (true) {
                 val now = System.currentTimeMillis()
-                updateCurrentMinuteRunners(now)
-                val s = settings.value
-                val adjustedMs = now - (s.prestartMinutes * 60_000L)
-                _uiState.update { it.copy(currentTimeMs = now, adjustedCurrentTimeMs = adjustedMs) }
+                _nowMs.value = now
+                val tod = currentTod(now)
+                if (tod != lastTod) {
+                    lastTod = tod
+                    updateCurrentMinuteRunners(now)
+                }
                 delay(1000 - (now % 1000))
             }
         }
@@ -125,6 +138,7 @@ class GateViewModel @Inject constructor(
             settings.collect { s ->
                 siReader.siReaderDeviceKey = s.siReaderDeviceKey
                 siReader.loudSound = s.loudSound
+                updateCurrentMinuteRunners(System.currentTimeMillis())
             }
         }
     }
@@ -221,12 +235,16 @@ class GateViewModel @Inject constructor(
         }
     }
 
-    private fun updateCurrentMinuteRunners(nowMs: Long) {
+    private fun currentTod(nowMs: Long): Int {
         val adjustedMs = nowMs - (settings.value.prestartMinutes * 60_000L)
-        val currentTod = (adjustedMs / 60_000).toInt() % (24 * 60)
+        return (adjustedMs / 60_000).toInt() % (24 * 60)
+    }
+
+    private fun updateCurrentMinuteRunners(nowMs: Long) {
+        val tod = currentTod(nowMs)
         val all = filterRunnersByStartPlace(cachedRunners)
         val current = all.filter { r ->
-            (r.startTime / 60_000).toInt() % (24 * 60) == currentTod
+            (r.startTime / 60_000).toInt() % (24 * 60) == tod
         }.sortedBy { it.startNumber }
         _uiState.update { it.copy(currentMinuteRunners = current) }
     }

@@ -83,6 +83,13 @@ private const val colClubWeight = 1f
 
 private enum class SortColumn { START_NO, TIME, CLASS, CHIP, NAME, CLUB }
 
+private data class ClassPartition(
+    val priority: List<ClassGroup>,
+    val men: List<ClassGroup>,
+    val women: List<ClassGroup>,
+    val other: List<ClassGroup>
+)
+
 private fun applySort(
     runners: List<RunnerEntity>,
     column: SortColumn?,
@@ -115,8 +122,6 @@ fun CompetitorSearchScreen(
     val selectedRunner by viewModel.selectedRunner.collectAsStateWithLifecycle()
     val availableClasses by viewModel.availableClasses.collectAsStateWithLifecycle()
     val availableClubs by viewModel.availableClubs.collectAsStateWithLifecycle()
-    val currentTimeMs by viewModel.currentTimeMs.collectAsStateWithLifecycle()
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
 
     // Header-tap sorting. Resets to the per-mode default order when the mode changes.
     var sortColumn by remember(mode) { mutableStateOf<SortColumn?>(null) }
@@ -225,6 +230,10 @@ fun CompetitorSearchScreen(
     }
 
     selectedRunner?.let { runner ->
+        // Clock + settings collected here, not at screen level, so the per-second tick
+        // recomposes only this dialog instead of the whole search screen.
+        val currentTimeMs by viewModel.currentTimeMs.collectAsStateWithLifecycle()
+        val settings by viewModel.settings.collectAsStateWithLifecycle()
         EditUserDialog(
             runner = runner,
             availableClasses = availableClasses,
@@ -461,14 +470,17 @@ private fun CompetitorRow(runner: RunnerEntity, onSelect: () -> Unit) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ClassPicker(classes: List<ClassGroup>, onSelect: (ClassGroup) -> Unit) {
-    val priority = classes.filter {
-        it.className.startsWith("DIR", ignoreCase = true) ||
-            it.className.startsWith("OPEN", ignoreCase = true)
+    val (priority, men, women, other) = remember(classes) {
+        val priority = classes.filter {
+            it.className.startsWith("DIR", ignoreCase = true) ||
+                it.className.startsWith("OPEN", ignoreCase = true)
+        }
+        val rest = classes.filterNot { it in priority }
+        val men = rest.filter { it.className.startsWith("M", ignoreCase = true) }
+        val women = rest.filter { it.className.startsWith("W", ignoreCase = true) }
+        val other = rest.filterNot { it in men || it in women }
+        ClassPartition(priority, men, women, other)
     }
-    val rest = classes.filterNot { it in priority }
-    val men = rest.filter { it.className.startsWith("M", ignoreCase = true) }
-    val women = rest.filter { it.className.startsWith("W", ignoreCase = true) }
-    val other = rest.filterNot { it in men || it in women }
 
     Column(
         modifier = Modifier

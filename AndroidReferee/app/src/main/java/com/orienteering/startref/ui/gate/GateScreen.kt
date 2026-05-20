@@ -26,6 +26,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +46,12 @@ import java.time.format.DateTimeFormatter
 
 private val clockFormatter = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault())
 
+private val SignalWhite = Color.White
+private val SignalBrightGreen = Color(0xFF00E676)
+private val SignalGreen = Color(0xFF4CAF50)
+private val SignalOrange = Color(0xFFFF9800)
+private val SignalRed = Color(0xFFF44336)
+
 @Composable
 fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -62,30 +69,15 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
             // SI Reader connection status strip
             SiStatusStrip(connected = state.readerConnected)
 
-            // Time field — background color = signal color
-            TimeField(
-                timeMs = state.adjustedCurrentTimeMs,
-                signal = state.signal,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            HorizontalDivider()
-
-            // Current-minute runner list
-            val minuteLabel = clockFormatter.format(
-                Instant.ofEpochMilli((state.adjustedCurrentTimeMs / 60_000) * 60_000)
-            ).substring(0, 5) // HH:mm
-
-            Text(
-                text = "Runners starting at $minuteLabel",
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
+            // Clock + current-minute label — isolated in its own composable so the
+            // per-second tick does not recompose the runner list below.
+            GateClockSection(viewModel = viewModel, signal = state.signal)
 
             LazyColumn(modifier = Modifier.weight(1f)) {
                 items(
                     items = state.currentMinuteRunners,
-                    key = { it.startNumber }
+                    key = { it.startNumber },
+                    contentType = { "runner" }
                 ) { runner ->
                     RunnerGateRow(
                         runner = runner,
@@ -93,7 +85,7 @@ fun GateScreen(viewModel: GateViewModel = hiltViewModel()) {
                         isJustMatched = runner.startNumber == state.lastMatchedRunner?.startNumber && state.signal == GateSignal.BRIGHT_GREEN,
                         clickable = state.rowsClickable,
                         fontSize = settings.gateFontSize,
-                        onClick = { viewModel.assignChipToRunner(runner) }
+                        onClick = viewModel::assignChipToRunner
                     )
                 }
             }
@@ -211,13 +203,38 @@ internal fun SiStatusStrip(connected: Boolean) {
 }
 
 @Composable
+private fun GateClockSection(viewModel: GateViewModel, signal: GateSignal) {
+    val adjustedMs by viewModel.adjustedCurrentTimeMs.collectAsStateWithLifecycle()
+
+    // Time field — background color = signal color
+    TimeField(
+        timeMs = adjustedMs,
+        signal = signal,
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    HorizontalDivider()
+
+    val minuteLabel = remember(adjustedMs / 60_000) {
+        clockFormatter.format(
+            Instant.ofEpochMilli((adjustedMs / 60_000) * 60_000)
+        ).substring(0, 5) // HH:mm
+    }
+    Text(
+        text = "Runners starting at $minuteLabel",
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+    )
+}
+
+@Composable
 private fun TimeField(timeMs: Long, signal: GateSignal, modifier: Modifier = Modifier) {
     val bgColor = when (signal) {
-        GateSignal.IDLE -> Color.White
-        GateSignal.BRIGHT_GREEN -> Color(0xFF00E676)
-        GateSignal.GREEN -> Color(0xFF4CAF50)
-        GateSignal.ORANGE -> Color(0xFFFF9800)
-        GateSignal.RED -> Color(0xFFF44336)
+        GateSignal.IDLE -> SignalWhite
+        GateSignal.BRIGHT_GREEN -> SignalBrightGreen
+        GateSignal.GREEN -> SignalGreen
+        GateSignal.ORANGE -> SignalOrange
+        GateSignal.RED -> SignalRed
     }
     val textColor = when (signal) {
         GateSignal.IDLE -> Color.Black
@@ -246,20 +263,24 @@ private fun RunnerGateRow(
     isJustMatched: Boolean,   // bright flash for the current scan
     clickable: Boolean,
     fontSize: Float = 34f,
-    onClick: () -> Unit
+    onClick: (RunnerEntity) -> Unit
 ) {
     val bgColor = when {
-        isJustMatched -> Color(0xFF00E676)   // bright green flash
-        isStarted     -> Color(0xFF4CAF50)   // steady green — runner has started
+        isJustMatched -> SignalBrightGreen   // bright green flash
+        isStarted     -> SignalGreen         // steady green — runner has started
         else          -> Color.Transparent
     }
-    val normalStyle = TextStyle(fontSize = fontSize.sp, fontWeight = FontWeight.Bold)
-    val narrowStyle = normalStyle.copy(textGeometricTransform = TextGeometricTransform(scaleX = 0.7f))
+    val normalStyle = remember(fontSize) {
+        TextStyle(fontSize = fontSize.sp, fontWeight = FontWeight.Bold)
+    }
+    val narrowStyle = remember(fontSize) {
+        normalStyle.copy(textGeometricTransform = TextGeometricTransform(scaleX = 0.7f))
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(bgColor)
-            .clickable(enabled = clickable, onClick = onClick)
+            .clickable(enabled = clickable, onClick = { onClick(runner) })
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

@@ -66,9 +66,10 @@ class SiStationReader @Inject constructor(
     private var toneGenerator: ToneGenerator? = null
     private var toneGeneratorStream: Int = -1
 
-    // Accumulation buffer for parsing multi-byte SI protocol frames (capped to prevent unbounded growth)
-    private val buffer = mutableListOf<Byte>()
-    private val maxBufferSize = 4096
+    // Accumulation buffer for parsing multi-byte SI protocol frames (capped to prevent unbounded
+    // growth). Fixed ByteArray + cursor — avoids boxing every serial byte into a List<Byte>.
+    private val buffer = ByteArray(MAX_BUFFER_SIZE)
+    private var bufferLen = 0
 
     /**
      * Success sound on card read.
@@ -101,6 +102,21 @@ class SiStationReader @Inject constructor(
         }
     }
 
+    /** Minute-boundary alert — loud alarm tone on STREAM_ALARM, reuses the shared ToneGenerator. */
+    fun playMinuteAlert() {
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager.setStreamVolume(
+                AudioManager.STREAM_ALARM,
+                audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM),
+                0
+            )
+            playTone(AudioManager.STREAM_ALARM, ToneGenerator.TONE_CDMA_ABBR_ALERT, 800)
+        } catch (e: Exception) {
+            debugLog.log("playMinuteAlert failed: ${e.message}")
+        }
+    }
+
     private fun playTone(stream: Int, tone: Int, durationMs: Int) {
         synchronized(toneLock) {
             var tg = toneGenerator
@@ -128,6 +144,7 @@ class SiStationReader @Inject constructor(
 
     companion object {
         const val ACTION_USB_PERMISSION = "com.orienteering.startref.USB_PERMISSION"
+        private const val MAX_BUFFER_SIZE = 4096
     }
 
     /**
@@ -183,7 +200,7 @@ class SiStationReader @Inject constructor(
                     // calling ioManager.stop() re-entrantly from its own thread.
                     // Just clear state; the run() loop exits on its own after this callback.
                     ioManager = null
-                    buffer.clear()
+                    bufferLen = 0
                     _connectionState.value = SiConnectionState.DISCONNECTED
                 }
             }).also {
@@ -212,7 +229,7 @@ class SiStationReader @Inject constructor(
         ioManager?.stop()
         ioManager = null
         port = null
-        buffer.clear()
+        bufferLen = 0
         ioExecutor.shutdownNow()
         executor.shutdownNow()
         synchronized(toneLock) {
@@ -246,34 +263,34 @@ class SiStationReader @Inject constructor(
     private fun parseData(data: ByteArray) {
         // Log raw hex so we can spot NAK (0x15) or unexpected responses
         debugLog.log("RX: ${data.joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }}")
-        buffer.addAll(data.toList())
-        if (buffer.size > maxBufferSize) {
-            debugLog.log("Buffer overflow (${buffer.size} bytes), clearing")
-            buffer.clear()
+        if (bufferLen + data.size > MAX_BUFFER_SIZE) {
+            debugLog.log("Buffer overflow (${bufferLen + data.size} bytes), clearing")
+            bufferLen = 0
             return
         }
+        System.arraycopy(data, 0, buffer, bufferLen, data.size)
+        bufferLen += data.size
 
-        val buf = buffer.toMutableList()
         var i = 0
-        while (i < buf.size) {
+        while (i < bufferLen) {
             // Skip optional 0xFF wakeup bytes
-            if (buf[i] == 0xFF.toByte()) {
+            if (buffer[i] == 0xFF.toByte()) {
                 i++
                 continue
             }
             // Look for STX = 0x02
-            if (buf[i] != 0x02.toByte()) {
+            if (buffer[i] != 0x02.toByte()) {
                 i++
                 continue
             }
             // Need at least STX + CMD + LEN = 3 bytes to read length
-            if (i + 2 >= buf.size) break
+            if (i + 2 >= bufferLen) break
 
-            val cmd = buf[i + 1]
-            val len = buf[i + 2].toInt() and 0xFF
+            val cmd = buffer[i + 1]
+            val len = buffer[i + 2].toInt() and 0xFF
             // Full frame: STX(1) + CMD(1) + LEN(1) + DATA(len) + CRC(2) + ETX(1) = len + 6
             val frameEnd = i + len + 6
-            if (buf.size < frameEnd) break  // Incomplete frame — wait for more data
+            if (bufferLen < frameEnd) break  // Incomplete frame — wait for more data
 
             val cmdInt = cmd.toInt() and 0xFF
             val cmdName = when (cmdInt) {
@@ -298,15 +315,15 @@ class SiStationReader @Inject constructor(
             if (isCardFrame && len >= 6) {
                 val dataStart = i + 3
                 // DATA[2] is a type/flag byte — card number is always in DATA[3..5]
-                val threeByte = ((buf[dataStart + 3].toLong() and 0xFF) shl 16) or
-                                ((buf[dataStart + 4].toLong() and 0xFF) shl 8) or
-                                 (buf[dataStart + 5].toLong() and 0xFF)
+                val threeByte = ((buffer[dataStart + 3].toLong() and 0xFF) shl 16) or
+                                ((buffer[dataStart + 4].toLong() and 0xFF) shl 8) or
+                                 (buffer[dataStart + 5].toLong() and 0xFF)
 
                 val cardNum: Long = if (threeByte < 500_000L) {
                     // SI5: DATA[3]=series, DATA[4..5]=2-byte value within series
-                    val series = buf[dataStart + 3].toLong() and 0xFF
-                    val value = ((buf[dataStart + 4].toLong() and 0xFF) shl 8) or
-                                 (buf[dataStart + 5].toLong() and 0xFF)
+                    val series = buffer[dataStart + 3].toLong() and 0xFF
+                    val value = ((buffer[dataStart + 4].toLong() and 0xFF) shl 8) or
+                                 (buffer[dataStart + 5].toLong() and 0xFF)
                     if (series < 2L) value else series * 100_000L + value
                 } else {
                     // SI6/8/9: straight 3-byte number
@@ -320,7 +337,10 @@ class SiStationReader @Inject constructor(
             i = frameEnd
         }
 
-        buffer.clear()
-        if (i < buf.size) buffer.addAll(buf.subList(i, buf.size))
+        // Shift any unparsed remainder to the front of the buffer
+        if (i in 1 until bufferLen) {
+            System.arraycopy(buffer, i, buffer, 0, bufferLen - i)
+        }
+        bufferLen -= i
     }
 }
